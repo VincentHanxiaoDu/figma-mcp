@@ -1,6 +1,5 @@
 import dotenv from "dotenv";
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
-import { AzureEmbeddings } from './embed';
 import { Document } from 'langchain/document';
 import { EmbeddingsInterface } from "@langchain/core/embeddings";
 
