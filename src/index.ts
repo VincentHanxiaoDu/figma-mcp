@@ -6,7 +6,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { isInitializeRequest, ServerNotification, ServerRequest } from "@modelcontextprotocol/sdk/types.js"
 import { z } from "zod";
 import { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
-import { getFigmaFileNode, getFigmaFileRoot, queryFigmaFileNode, getFigmaImages } from "./tools";
+import { getFigmaFileNode, getFigmaFileRoot, queryFigmaFileNode, getFigmaImages } from "./tools/tools";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -171,13 +171,6 @@ app.post('/mcp', async (req, res) => {
             }
           ]
         }
-        // return {
-        //   content: res.map(({ id, url, base64 }) => ({
-        //     type: "image",
-        //     mimeType: "image/png",
-        //     data: base64
-        //   }))
-        // };
       }
     );
 
