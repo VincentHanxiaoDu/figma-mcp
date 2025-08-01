@@ -1,8 +1,8 @@
 import axios from 'axios';
 import { Document } from 'langchain/document';
-import { readFigmaFileCache, writeFigmaFileCache } from '../utils/storage/mongo';
-import { hybridSearch } from '../utils/search/hybridSearch';
+import { hybridSearch } from '../search/hybridSearch';
 import { EmbeddingsInterface } from "@langchain/core/embeddings";
+import { FigmaFileCache } from './cache';
 
 export function parseFigmaUrl(url: string): {
   fileKey: string;
@@ -125,8 +125,8 @@ async function getFigmaFileMetaData(fileKey: string, figmaToken: string) {
   return response.data;
 }
 
-async function getFigmaFile(fileKey: string, fileVersion: string, figmaToken: string) {
-  const fileDoc = await readFigmaFileCache(fileKey, fileVersion);
+async function getFigmaFile(figmaFileCache: FigmaFileCache | null, fileKey: string, fileVersion: string, figmaToken: string) {
+  const fileDoc = await figmaFileCache?.readFigmaFileCache(fileKey, fileVersion);
   if (fileDoc) {
     return fileDoc;
   }
@@ -146,12 +146,13 @@ async function getFigmaFile(fileKey: string, fileVersion: string, figmaToken: st
     throw new Error(`Failed to get Figma file: ${response.status} ${response.statusText}`);
   }
   if (resJson) {
-    await writeFigmaFileCache(resJson, fileKey, fileVersion);
+    await figmaFileCache?.writeFigmaFileCache(resJson, fileKey, fileVersion);
   }
   return resJson;
 }
 
 export async function queryFigmaFileNode(
+  figmaFileCache: FigmaFileCache | null,
   fileKey: string,
   query: string,
   topK: number,
@@ -159,7 +160,7 @@ export async function queryFigmaFileNode(
   embeddings: EmbeddingsInterface,
 ): Promise<{ name: string, ids: string[] }[]> {
   const fileMeta = await getFigmaFileMetaData(fileKey, figmaToken);
-  const resJson = await getFigmaFile(fileKey, fileMeta.file.version, figmaToken);
+  const resJson = await getFigmaFile(figmaFileCache, fileKey, fileMeta.file.version, figmaToken);
   // Construct mapping of name to ids.
   const groupedMap = Array.from(traverse_node(resJson.document)).reduce(
     (acc: Map<string, string[]>, [name, id]) => {
@@ -201,7 +202,7 @@ export async function getFigmaImages(
         ids: ids.join(","),
         format: "png",
         scale: scale,
-        contents_only: contents_only ? "true": "false",
+        contents_only: contents_only ? "true" : "false",
       }
     }
   )

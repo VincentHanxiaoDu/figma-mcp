@@ -1,12 +1,15 @@
 import { EmbeddingsInterface } from "@langchain/core/embeddings";
 import { AzureOpenAI } from "openai";
 import { assert } from "console";
-import { embeddingsCacheDB } from "../storage/mongo";
+import { MongoClient } from "mongodb";
 
-export class AzureEmbeddings implements EmbeddingsInterface {
-  static readonly cacheCollection = embeddingsCacheDB.collection("text-embedding-3-large");
-  private batchSize: number;
-  private client: AzureOpenAI;
+export interface Embeddings {
+  getEmbeddings(texts: string[]): AsyncGenerator<number[], void, unknown>;
+}
+
+export class AzureEmbeddings implements Embeddings {
+  protected batchSize: number;
+  protected client: AzureOpenAI;
 
   constructor(batchSize: number) {
     assert(Number.isInteger(batchSize), "batchSize must be an integer");
@@ -19,7 +22,7 @@ export class AzureEmbeddings implements EmbeddingsInterface {
     });
   }
 
-  async *requestEmbeddings(texts: string[]): AsyncGenerator<number[], void, unknown> {
+  async *getEmbeddings(texts: string[]): AsyncGenerator<number[], void, unknown> {
     for (let i = 0; i < texts.length; i += this.batchSize) {
       const batch = texts.slice(i, i + this.batchSize);
 
@@ -33,28 +36,37 @@ export class AzureEmbeddings implements EmbeddingsInterface {
       }
     }
   }
+}
+
+export class MongoCacheableEmbeddings implements EmbeddingsInterface {
+  protected embeddingsCacheDB;
+  protected cacheCollection;
+  protected embeddings: Embeddings;
+
+  public constructor(embeddings: Embeddings, mongoClient: MongoClient, cacheCollectionName: string) {
+    this.embeddingsCacheDB = mongoClient.db(process.env.MONGODB_EMBEDDING_CACHE_DB || "embedding-cache");
+    this.cacheCollection = this.embeddingsCacheDB.collection(cacheCollectionName);
+    this.cacheCollection.createIndex({ text: 1 });
+    this.embeddings = embeddings;
+  }
 
   async *embed(texts: string[]): AsyncGenerator<number[], void, unknown> {
     const cacheMap = new Map<string, number[]>();
-    const cachedDocs = await AzureEmbeddings.cacheCollection.find({ text: { $in: texts } }).toArray();
+    const cachedDocs = await this.cacheCollection.find({ text: { $in: texts } }).toArray();
     for (const doc of cachedDocs) {
       cacheMap.set(doc.text, doc.embedding);
     }
     const notCachedTexts = [...new Set(texts)].filter(text => !cacheMap.has(text));
-    const embeddingIterator = this.requestEmbeddings(notCachedTexts);
+    const embeddingIterator = this.embeddings.getEmbeddings(notCachedTexts);
 
     for (const text of notCachedTexts) {
       const { value: embedding, done } = await embeddingIterator.next();
       if (done || !embedding) throw new Error(`Embedding missing for text: "${text}"`);
       cacheMap.set(text, embedding);
-      await AzureEmbeddings.cacheCollection.insertOne({ text, embedding });
+      await this.cacheCollection.insertOne({ text, embedding });
     }
 
-    for (const text of texts) {
-      const embedding = cacheMap.get(text);
-      if (!embedding) throw new Error(`Missing embedding for text: "${text}"`);
-      yield embedding;
-    }
+    yield* texts.map(text => cacheMap.get(text) as number[]);
   }
 
   async embedDocuments(texts: string[]): Promise<number[][]> {
