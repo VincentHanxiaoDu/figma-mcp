@@ -8,6 +8,7 @@ import { z } from "zod";
 import { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import { getFigmaFileNode, getFigmaFileRoot, queryFigmaFileNode, getFigmaImages, parseFigmaUrl } from "./tools/tools";
 import dotenv from "dotenv";
+import { AzureEmbeddings } from "./utils/search/embed";
 
 dotenv.config();
 
@@ -126,23 +127,24 @@ app.post('/mcp', async (req, res) => {
       }
     );
 
-    server.registerResource(
-      "figma-files-list",
-      "figma-files://file-list",
-      {
-        title: "Figma Files List",
-        description: "List of Figma files with names and keys."
-      },
-      async (uri: URL, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => ({
-        contents: [
-          {
-            uri: uri.toString(),
-            mimeType: "application/json",
-            text: JSON.stringify([{name: "Fintech new user design", fileKey: "S20CJ6i5uIpKZqbVMXnTrD"}], null, 0)
-          }
-        ]
-      })
-    );
+    // TODO: Implement figma files list resource with mock login, not supported by the Figma RESTful API.
+    // server.registerResource(
+    //   "figma-files-list",
+    //   "figma-files://file-list",
+    //   {
+    //     title: "Figma Files List",
+    //     description: "List of Figma files with names and keys."
+    //   },
+    //   async (uri: URL, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => ({
+    //     contents: [
+    //       {
+    //         uri: uri.toString(),
+    //         mimeType: "application/json",
+    //         text: JSON.stringify([{name: "Fintech new user design", fileKey: "S20CJ6i5uIpKZqbVMXnTrD"}], null, 0)
+    //       }
+    //     ]
+    //   })
+    // );
 
     server.registerTool(
       "query-figma-file-node",
@@ -157,7 +159,8 @@ app.post('/mcp', async (req, res) => {
       },
       async (args: { fileKey: string, query: string, topK: number }, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
         const figmaToken = getFigmaToken(extra);
-        const res = await queryFigmaFileNode(args.fileKey, args.query, args.topK, figmaToken);
+        const embeddings = new AzureEmbeddings(1000);
+        const res = await queryFigmaFileNode(args.fileKey, args.query, args.topK, figmaToken, embeddings);
         return {
           content: [{
             type: "text",

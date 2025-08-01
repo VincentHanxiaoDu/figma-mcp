@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
 import { AzureEmbeddings } from './embed';
 import { Document } from 'langchain/document';
+import { EmbeddingsInterface } from "@langchain/core/embeddings";
 
 dotenv.config();
 
@@ -18,8 +19,8 @@ function rerankScore(rank: number, k = 60, length: number, base = 1.5): number {
   return rrfScore(rank, k) * lengthPenalty(length, base);
 }
 
-export async function hybridSearch(query: string, topK: number, documents: Document[]) {
-  const vectorStore = await MemoryVectorStore.fromDocuments(documents, new AzureEmbeddings(1000));
+export async function hybridSearch(query: string, topK: number, documents: Document[], embeddings: EmbeddingsInterface) {
+  const vectorStore = await MemoryVectorStore.fromDocuments(documents, embeddings);
   const similarityResults = await vectorStore.similaritySearch(query, topK);
   const lexicalResults = documents
     .filter(doc => doc.pageContent.toLowerCase().includes(query.toLowerCase()))

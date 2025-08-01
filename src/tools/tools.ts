@@ -2,6 +2,7 @@ import axios from 'axios';
 import { Document } from 'langchain/document';
 import { readFigmaFileCache, writeFigmaFileCache } from '../utils/storage/mongo';
 import { hybridSearch } from '../utils/search/hybridSearch';
+import { EmbeddingsInterface } from "@langchain/core/embeddings";
 
 export function parseFigmaUrl(url: string): {
   fileKey: string;
@@ -155,6 +156,7 @@ export async function queryFigmaFileNode(
   query: string,
   topK: number,
   figmaToken: string,
+  embeddings: EmbeddingsInterface,
 ): Promise<{ name: string, ids: string[] }[]> {
   const fileMeta = await getFigmaFileMetaData(fileKey, figmaToken);
   const resJson = await getFigmaFile(fileKey, fileMeta.file.version, figmaToken);
@@ -179,7 +181,7 @@ export async function queryFigmaFileNode(
   });
 
   // Hybrid search.
-  return await hybridSearch(query, topK, documents);
+  return await hybridSearch(query, topK, documents, embeddings);
 }
 
 export async function getFigmaImages(
