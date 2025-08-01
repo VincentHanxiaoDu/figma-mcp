@@ -1,6 +1,5 @@
 .env
 mongod.conf
 mongo_data/
-dist/
 node_modules/
 package-lock.json
