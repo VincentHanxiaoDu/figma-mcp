@@ -6,7 +6,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { isInitializeRequest, ServerNotification, ServerRequest } from "@modelcontextprotocol/sdk/types.js"
 import { z } from "zod";
 import { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
-import { getFigmaFileNode, getFigmaFileRoot, queryFigmaFileNode, getFigmaImages } from "./tools/tools";
+import { getFigmaFileNode, getFigmaFileRoot, queryFigmaFileNode, getFigmaImages, parseFigmaUrl } from "./tools/tools";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -97,6 +97,26 @@ app.post('/mcp', async (req, res) => {
       async (args: { fileKey: string, depth: number, geometry: boolean }, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
         const figmaToken = getFigmaToken(extra);
         const res = await getFigmaFileRoot(args.fileKey, args.depth, args.geometry, figmaToken);
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify(res, null, 0)
+          }]
+        };
+      }
+    );
+
+    server.registerTool(
+      "parse-figma-url",
+      {
+        title: "parse-figma-url",
+        description: "Parse the Figma URL and return the file key and query params.",
+        inputSchema: {
+          url: z.string().describe("The Figma URL to parse."),
+        }
+      },
+      async (args: { url: string }, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
+        const res = parseFigmaUrl(args.url);
         return {
           content: [{
             type: "text",

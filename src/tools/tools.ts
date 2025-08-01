@@ -3,6 +3,32 @@ import { Document } from 'langchain/document';
 import { readFigmaFileCache, writeFigmaFileCache } from '../utils/storage/mongo';
 import { hybridSearch } from '../utils/search/hybridSearch';
 
+export function parseFigmaUrl(url: string): {
+  fileKey: string;
+  queryParams: Record<string, string>;
+} {
+  const figmaUrl = new URL(url);
+
+  if (!figmaUrl.hostname.includes("figma.com")) {
+    throw new Error(`Invalid Figma URL: ${url}`);
+  }
+
+  const pathMatch = figmaUrl.pathname.match(/^\/design\/([^/]+)/);
+  if (!pathMatch) {
+    throw new Error(`Invalid Figma URL: ${url}`);
+  }
+
+  const fileKey = pathMatch[1];
+
+  const queryParams: Record<string, string> = {};
+  figmaUrl.searchParams.forEach((value, key) => {
+    queryParams[key] = value;
+  });
+
+  return { fileKey, queryParams };
+}
+
+
 function addOmitMessage(figmaNode: Record<string, any>, maxDepth: number): Record<string, any> {
   function traverse(node: Record<string, any>, depth = 0): void {
     if (depth >= maxDepth) {
