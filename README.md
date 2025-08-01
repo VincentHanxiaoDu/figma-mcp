@@ -3,37 +3,19 @@
 A Figma MCP server based on Figma's RESTful API.
 
 Configuration:
+Use `.env.template` template to configure parameters.
 
-Install the required dependencies.
-```
-git clone https://github.com/VincentHanxiaoDu/figma-mcp
-cd figma-mcp --legacy-peer-deps
-```
+Suppose you have a configuration file `.env`
 
-Configure the .env file for Mongo/Azure AI setup (you can always change the embedding method by implementing the `EmbeddingsInterface` interface provided by `@langchain/core/embeddings`, and change the embeddings impl in the `query-figma-file-node` tool defined in the `index.ts`, i.e., `const embeddings = new <Your Embeddings Impl>`)
+Run the mongod (You can use docker for simplicity):
+`docker run -d -p 27017:27017 --name my-mongo-container mongo:latest`
 
-Configure the .env file with template:
-`cp .env.template .env`
-Then edit the .env file as you need.
+So the `MONGODB_URI` in the `.env` file should be set to `mongodb://127.0.0.1:27017`
 
-To enable caching of files and embeddings, make sure a mongod instance is running.
+Run the server with npx command:
+`npx github:VincentHanxiaoDu/figma-mcp --env .env --port 3000`
 
-Build & start the server with the npm start script:
-```
-npm run build
-npm run start
-```
+Connect to Claude Code (Replace `<your-figma-token>` with your Figma token):
+`claude mcp add -t http figma-mcp http://127.0.0.1:3000/mcp --header x-figma-token:<your-figma-token>`, or set the `FIGMA_TOKEN` in the env file and run just `claude mcp add -t http figma-mcp http://127.0.0.1:3000/mcp`.
 
-Or debug with the dev script
-```
-npm run dev
-```
-
-Configure with Claude Code, replace `<your-figma-token>` with your actual Figma API token:
-`claude mcp add -t http figma-mcp http://localhost:3000/mcp --header x-figma-token:<your-figma-token>`
-
-Or you can set the `FIGMA_TOKEN` env variable in the .env file:
-```
-FIGMA_TOKEN=<your-figma-token>
-...
-```
+Now you can use the MCP in Claude Code.
