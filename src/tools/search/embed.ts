@@ -84,3 +84,50 @@ export class MongoCacheableEmbeddings implements EmbeddingsInterface {
     return next.value;
   }
 }
+
+
+
+export class MemoryCacheableEmbeddings implements EmbeddingsInterface {
+  protected embeddingsCache: Map<string, number[]>;
+  protected embeddings: Embeddings;
+
+  public constructor(embeddings: Embeddings) {
+    this.embeddingsCache = new Map();
+    this.embeddings = embeddings;
+  }
+
+  async *embed(texts: string[]): AsyncGenerator<number[], void, unknown> {
+    const cacheMap = new Map<string, number[]>();
+    for (const text of texts) {
+      if (this.embeddingsCache.has(text)) {
+        cacheMap.set(text, this.embeddingsCache.get(text) as number[]);
+      }
+    }
+    const notCachedTexts = [...new Set(texts)].filter(text => !cacheMap.has(text));
+    const embeddingIterator = this.embeddings.getEmbeddings(notCachedTexts);
+
+    for (const text of notCachedTexts) {
+      const { value: embedding, done } = await embeddingIterator.next();
+      if (done || !embedding) throw new Error(`Embedding missing for text: "${text}"`);
+      cacheMap.set(text, embedding);
+      this.embeddingsCache.set(text, embedding);
+    }
+
+    yield* texts.map(text => cacheMap.get(text) as number[]);
+  }
+
+  async embedDocuments(texts: string[]): Promise<number[][]> {
+    const embeddings: number[][] = [];
+    for await (const embedding of this.embed(texts)) {
+      embeddings.push(embedding);
+    }
+    return embeddings;
+  }
+
+  async embedQuery(query: string): Promise<number[]> {
+    const embeddingsIterator = this.embed([query]);
+    const next = await embeddingsIterator.next();
+    if (next.done) throw new Error(`No embedding found for query: "${query}"`);
+    return next.value;
+  }
+}

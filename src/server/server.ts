@@ -35,17 +35,18 @@ async function loadEnv(argv: yargs.Arguments) {
 async function getMongoClient() {
   try {
     const mongoUri = process.env.MONGODB_URI!;
+
     console.info(`Connecting to MongoDB at ${mongoUri}`);
     return await new MongoClient(mongoUri).connect();
-  } catch (e) {
-    console.error("Failed to connect to MongoDB", e);
-    process.exit(1);
+  } catch (e: any) {
+    console.warn("Failed to connect to MongoDB, using memory cache");
+    return null;
   }
 }
 
 async function startMcpServer(
-  mongoClient: MongoClient,
-  curryRegisterMongo: (server: McpServer) => Promise<(mongoClient: MongoClient) => Promise<void>>
+  mongoClient: MongoClient | null,
+  curryRegisterMongo: (server: McpServer) => Promise<(mongoClient: MongoClient | null) => Promise<void>>
 ): Promise<void> {
 
   const app = express();
@@ -128,7 +129,7 @@ async function startMcpServer(
   // Handle DELETE requests for session termination
   app.delete('/mcp', handleSessionRequest);
 
-  const port = process.env.PORT;
+  const port = process.env.PORT || "3000";
   app.listen(port, () => {
     console.info(`Server is running on port ${port}`);
   });

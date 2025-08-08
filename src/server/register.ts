@@ -3,9 +3,9 @@ import { z } from "zod";
 import { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import { ServerRequest, ServerNotification } from "@modelcontextprotocol/sdk/types.js";
 import { getFigmaFileNode, getFigmaFileRoot, queryFigmaFileNode, getFigmaImages, parseFigmaUrl } from "../tools/figma/figmaTools";
-import { MongoCacheableEmbeddings, AzureEmbeddings } from "../tools/search/embed";
+import { MongoCacheableEmbeddings, MemoryCacheableEmbeddings, AzureEmbeddings } from "../tools/search/embed";
 import { MongoClient } from "mongodb";
-import { FigmaFileCache } from "../tools/figma/cache";
+import { FigmaFileCache, FigmaFileMemoryCache, FigmaFileMongoCache } from "../tools/figma/cache";
 
 const getFigmaToken = (extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
   const figmaToken = extra.requestInfo?.headers["x-figma-token"] as string ?? process.env.FIGMA_TOKEN as string | undefined;
@@ -15,7 +15,7 @@ const getFigmaToken = (extra: RequestHandlerExtra<ServerRequest, ServerNotificat
   return figmaToken;
 }
 
-export async function curryRegisterMongo(server: McpServer): Promise<(mongoClient: MongoClient) => Promise<void>> {
+export async function curryRegisterMongo(server: McpServer): Promise<(mongoClient: MongoClient | null) => Promise<void>> {
   server.registerTool(
     "get-figma-nodes",
     {
@@ -110,13 +110,16 @@ export async function curryRegisterMongo(server: McpServer): Promise<(mongoClien
   );
 
   // register the tool that uses the mongo client.
-  return async (mongoClient: MongoClient) => {
-    const embeddings = new MongoCacheableEmbeddings(
-      new AzureEmbeddings(1000),
+  return async (mongoClient: MongoClient | null) => {
+    const figmaFileCache: FigmaFileCache = mongoClient ? new FigmaFileMongoCache(mongoClient) : new FigmaFileMemoryCache();
+    const azureEmbeddings = new AzureEmbeddings(1000);
+    const embeddings = mongoClient ? new MongoCacheableEmbeddings(
+      azureEmbeddings,
       mongoClient,
       "azure-embeddings-cache"
+    ) : new MemoryCacheableEmbeddings(
+      azureEmbeddings
     );
-    const figmaFileCache = new FigmaFileCache(mongoClient);
     server.registerTool(
       "query-figma-file-node",
       {

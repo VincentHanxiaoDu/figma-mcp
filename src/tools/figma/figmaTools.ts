@@ -122,6 +122,9 @@ async function getFigmaFileMetaData(fileKey: string, figmaToken: string) {
       },
     }
   );
+  if (response.status !== 200) {
+    throw new Error(`Failed to get Figma file meta data: ${response.status} ${response.statusText}`);
+  }
   return response.data;
 }
 

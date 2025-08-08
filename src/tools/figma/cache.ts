@@ -1,6 +1,12 @@
 import { Collection, GridFSBucket, MongoClient } from 'mongodb';
 
-export class FigmaFileCache {
+
+export interface FigmaFileCache {
+  readFigmaFileCache(fileKey: string, fileVersion: string): Promise<any>;
+  writeFigmaFileCache(jsonObj: any, fileKey: string, fileVersion: string): Promise<void>;
+}
+
+export class FigmaFileMongoCache implements FigmaFileCache {
   protected figmaFileCacheCollection: Collection;
   protected figmaFileCacheBucket: GridFSBucket;
 
@@ -64,5 +70,17 @@ export class FigmaFileCache {
 
       uploadStream.end(Buffer.from(jsonString));
     });
+  }
+}
+
+export class FigmaFileMemoryCache implements FigmaFileCache {
+  protected figmaFileCache: Map<{fileKey: string, fileVersion: string}, any> = new Map();
+
+  async readFigmaFileCache(fileKey: string, fileVersion: string): Promise<any> {
+    return this.figmaFileCache.get({ fileKey, fileVersion }) ?? null;
+  }
+
+  async writeFigmaFileCache(jsonObj: any, fileKey: string, fileVersion: string): Promise<void> {
+    this.figmaFileCache.set({ fileKey, fileVersion }, jsonObj);
   }
 }
