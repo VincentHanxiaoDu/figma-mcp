@@ -7,7 +7,7 @@ Use `.env.template` template to configure parameters.
 
 Suppose you have a configuration file `.env`
 
-Run the mongod (You can use docker for simplicity):
+Optional (for using MongoDB as the caching backend): Run the mongod (You can use docker for simplicity):
 `docker run -d -p 27017:27017 --name my-mongo-container mongo:latest`
 
 So the `MONGODB_URI` in the `.env` file should be set to `mongodb://127.0.0.1:27017`
