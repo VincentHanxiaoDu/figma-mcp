@@ -88,8 +88,9 @@ async function curryRegisterMongo(server) {
     });
     // register the tool that uses the mongo client.
     return async (mongoClient) => {
-        const embeddings = new embed_1.MongoCacheableEmbeddings(new embed_1.AzureEmbeddings(1000), mongoClient, "azure-embeddings-cache");
-        const figmaFileCache = new cache_1.FigmaFileCache(mongoClient);
+        const figmaFileCache = mongoClient ? new cache_1.FigmaFileMongoCache(mongoClient) : new cache_1.FigmaFileMemoryCache();
+        const azureEmbeddings = new embed_1.AzureEmbeddings(1000);
+        const embeddings = mongoClient ? new embed_1.MongoCacheableEmbeddings(azureEmbeddings, mongoClient, "azure-embeddings-cache") : new embed_1.MemoryCacheableEmbeddings(azureEmbeddings);
         server.registerTool("query-figma-file-node", {
             title: "query-figma-file-node",
             description: "Query the figma file node by name similarity search.",

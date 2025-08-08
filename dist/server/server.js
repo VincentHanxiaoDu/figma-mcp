@@ -42,8 +42,8 @@ async function getMongoClient() {
         return await new mongodb_1.MongoClient(mongoUri).connect();
     }
     catch (e) {
-        console.error("Failed to connect to MongoDB", e);
-        process.exit(1);
+        console.warn("Failed to connect to MongoDB, using memory cache");
+        return null;
     }
 }
 async function startMcpServer(mongoClient, curryRegisterMongo) {
@@ -117,7 +117,7 @@ async function startMcpServer(mongoClient, curryRegisterMongo) {
     app.get('/mcp', handleSessionRequest);
     // Handle DELETE requests for session termination
     app.delete('/mcp', handleSessionRequest);
-    const port = process.env.PORT;
+    const port = process.env.PORT || "3000";
     app.listen(port, () => {
         console.info(`Server is running on port ${port}`);
     });

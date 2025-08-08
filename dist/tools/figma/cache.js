@@ -1,8 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.FigmaFileCache = void 0;
+exports.FigmaFileMemoryCache = exports.FigmaFileMongoCache = void 0;
 const mongodb_1 = require("mongodb");
-class FigmaFileCache {
+class FigmaFileMongoCache {
     constructor(mongoClient) {
         const dbName = process.env.MONGODB_FIGMA_FILE_CACHE_DB || "figma_file_cache";
         const bucketName = process.env.MONGODB_FIGMA_FILE_CACHE_BUCKET || "figma_file_bucket";
@@ -58,4 +58,16 @@ class FigmaFileCache {
         });
     }
 }
-exports.FigmaFileCache = FigmaFileCache;
+exports.FigmaFileMongoCache = FigmaFileMongoCache;
+class FigmaFileMemoryCache {
+    constructor() {
+        this.figmaFileCache = new Map();
+    }
+    async readFigmaFileCache(fileKey, fileVersion) {
+        return this.figmaFileCache.get({ fileKey, fileVersion }) ?? null;
+    }
+    async writeFigmaFileCache(jsonObj, fileKey, fileVersion) {
+        this.figmaFileCache.set({ fileKey, fileVersion }, jsonObj);
+    }
+}
+exports.FigmaFileMemoryCache = FigmaFileMemoryCache;

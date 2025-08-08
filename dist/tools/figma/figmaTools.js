@@ -93,6 +93,9 @@ async function getFigmaFileMetaData(fileKey, figmaToken) {
             "X-Figma-Token": figmaToken,
         },
     });
+    if (response.status !== 200) {
+        throw new Error(`Failed to get Figma file meta data: ${response.status} ${response.statusText}`);
+    }
     return response.data;
 }
 async function getFigmaFile(figmaFileCache, fileKey, fileVersion, figmaToken) {

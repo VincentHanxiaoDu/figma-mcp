@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MongoCacheableEmbeddings = exports.AzureEmbeddings = void 0;
+exports.MemoryCacheableEmbeddings = exports.MongoCacheableEmbeddings = exports.AzureEmbeddings = void 0;
 const openai_1 = require("openai");
 const console_1 = require("console");
 class AzureEmbeddings {
@@ -68,3 +68,42 @@ class MongoCacheableEmbeddings {
     }
 }
 exports.MongoCacheableEmbeddings = MongoCacheableEmbeddings;
+class MemoryCacheableEmbeddings {
+    constructor(embeddings) {
+        this.embeddingsCache = new Map();
+        this.embeddings = embeddings;
+    }
+    async *embed(texts) {
+        const cacheMap = new Map();
+        for (const text of texts) {
+            if (this.embeddingsCache.has(text)) {
+                cacheMap.set(text, this.embeddingsCache.get(text));
+            }
+        }
+        const notCachedTexts = [...new Set(texts)].filter(text => !cacheMap.has(text));
+        const embeddingIterator = this.embeddings.getEmbeddings(notCachedTexts);
+        for (const text of notCachedTexts) {
+            const { value: embedding, done } = await embeddingIterator.next();
+            if (done || !embedding)
+                throw new Error(`Embedding missing for text: "${text}"`);
+            cacheMap.set(text, embedding);
+            this.embeddingsCache.set(text, embedding);
+        }
+        yield* texts.map(text => cacheMap.get(text));
+    }
+    async embedDocuments(texts) {
+        const embeddings = [];
+        for await (const embedding of this.embed(texts)) {
+            embeddings.push(embedding);
+        }
+        return embeddings;
+    }
+    async embedQuery(query) {
+        const embeddingsIterator = this.embed([query]);
+        const next = await embeddingsIterator.next();
+        if (next.done)
+            throw new Error(`No embedding found for query: "${query}"`);
+        return next.value;
+    }
+}
+exports.MemoryCacheableEmbeddings = MemoryCacheableEmbeddings;
