@@ -7,6 +7,12 @@ Use `.env.template` template to configure parameters.
 
 Suppose you have a configuration file `.env`
 
+
+Run with docker compose:
+`docker compose up -d`
+
+Run manually:
+
 Optional (for using MongoDB as the caching backend): Run the mongod (You can use docker for simplicity):
 `docker run -d -p 27017:27017 --name my-mongo-container mongo:latest`
 
