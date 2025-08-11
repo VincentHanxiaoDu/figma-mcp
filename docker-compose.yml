@@ -1,0 +1,30 @@
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: figma-mcp-mongodb
+    restart: unless-stopped
+    volumes:
+      - ./mongo_data/storage:/data/db
+    networks:
+      - figma-mcp-network
+
+  figma-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: figma-mcp-server
+    restart: unless-stopped
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017
+    ports:
+      - "3000:3000"
+    depends_on:
+      - mongodb
+    env_file:
+      - .env
+    networks:
+      - figma-mcp-network
+
+networks:
+  figma-mcp-network:
+    driver: bridge
