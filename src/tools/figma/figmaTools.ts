@@ -211,3 +211,136 @@ export async function getFigmaImages(
   )
   return response.data.images;
 }
+
+export async function getFigmaPlans(figmaCookies: string, compact: boolean = true) {
+  const response = await axios.get(
+    `https://www.figma.com/api/user/plans`,
+    {
+      headers: {
+        "Cookie": figmaCookies,
+      },
+    }
+  )
+  if (response.status !== 200 || response.data.error) {
+    throw new Error(`Failed to get Figma plans: <${response.status}> ${response.data.error}`);
+  }
+  if (compact) {
+    return response.data.meta.plans.map((plan: any) => ({
+      planId: plan.plan_id,
+      planName: plan.plan_name,
+    }));
+  } else {
+    return response.data;
+  } 
+}
+
+export async function getFigmaTeams(planId: string, figmaCookies: string, compact: boolean = true) {
+  const response = await axios.get(
+    `https://www.figma.com/api/orgs/${planId}/teams`,
+    {
+      params: {
+        include_member_count: false,
+        include_project_count: false,
+        include_top_members: false,
+      },
+      headers: {
+        "Cookie": figmaCookies,
+      },
+    }
+  )
+  if (response.status !== 200 || response.data.error) {
+    throw new Error(`Failed to get Figma plans: <${response.status}> ${response.data.error}`);
+  }
+
+  if (compact) {
+    return response.data.meta.map((team: any) => ({
+      teamId: team.id,
+      teamName: team.name,
+    }));
+  } else {
+    return response.data;
+  }
+}
+
+
+export async function getFigmaFolders(teamsId: string, figmaCookies: string, compact: boolean = true) {
+  const response = await axios.get(
+    `https://www.figma.com/api/teams/${teamsId}/folders`,
+    {
+      headers: {
+        "Cookie": figmaCookies,
+      },
+    }
+  )
+  if (response.status !== 200 || response.data.error) {
+    throw new Error(`Failed to get Figma team folders: <${response.status}> ${response.data.error}`);
+  }
+  
+  if (compact) {
+    return response.data.meta.folder_rows.map((folderRow: any) => ({
+      folderId: folderRow.id,
+      folderPath: folderRow.path,
+      folderDescription: folderRow.description
+    }));
+  } else {
+    return response.data;
+  }
+}
+
+async function getFigmaFilesPaginated(subPath: string, figmaCookies: string, compact: boolean = true, acc: any[] = []) {
+  const response = await axios.get(
+    `https://www.figma.com${subPath}`,
+    {
+      headers: {
+        "Cookie": figmaCookies,
+      },
+    }
+  )
+  if (response.status !== 200 || response.data.error) {
+    throw new Error(`Failed to get Figma files: <${response.status}> ${response.data.error}`);
+  }
+  const nextPage = response.data.pagination.next_page;
+  const pagePayload = compact ? response.data.meta.files.map((file: any) => ({
+    fileKey: file.key,
+    fileName: file.name,
+    fileDescription: file.description
+  })) : response.data.meta.files;
+  if (nextPage) {
+    return getFigmaFilesPaginated(nextPage, figmaCookies, compact, [...acc, ...pagePayload]);
+  } else {
+    return [...acc, ...pagePayload];
+  }
+}
+
+export async function getFigmaFiles(folderId: string, figmaCookies: string, compact: boolean = true) {
+  const response = await axios.get(
+    `https://www.figma.com/api/folders/${folderId}/paginated_files`,
+    {
+      headers: {
+        "Cookie": figmaCookies,
+      },
+      params: {
+        sort_column: "touched_at",
+        sort_order: "desc",
+        fetch_only_trashed_with_folder_files: false,
+        page_size: 8,
+        skip_fetching_repo_branches: true,
+        file_type: "figma",
+      }
+    }
+  )
+  if (response.status !== 200 || response.data.error) {
+    throw new Error(`Failed to get Figma team files: <${response.status}> ${response.data.error}`);
+  }
+  const nextPage = response.data.pagination.next_page;
+  const pagePayload = compact ? response.data.meta.files.map((file: any) => ({
+    fileKey: file.key,
+    fileName: file.name,
+    fileDescription: file.description
+  })) : response.data.meta.files;
+  if (nextPage) {
+    return getFigmaFilesPaginated(nextPage, figmaCookies, compact, [...pagePayload]);
+  } else {
+    return [...pagePayload];
+  }
+}

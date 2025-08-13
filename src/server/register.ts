@@ -2,20 +2,69 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import { ServerRequest, ServerNotification } from "@modelcontextprotocol/sdk/types.js";
-import { getFigmaFileNode, getFigmaFileRoot, queryFigmaFileNode, getFigmaImages, parseFigmaUrl } from "../tools/figma/figmaTools";
+import * as figmaTools from "../tools/figma/figmaTools";
 import { MongoCacheableEmbeddings, MemoryCacheableEmbeddings, AzureEmbeddings } from "../tools/search/embed";
 import { MongoClient } from "mongodb";
 import { FigmaFileCache, FigmaFileMemoryCache, FigmaFileMongoCache } from "../tools/figma/cache";
+import { loginFigma } from "../utils/auth/loginFigma";
 
-const getFigmaToken = (extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
-  const figmaToken = extra.requestInfo?.headers["x-figma-token"] as string ?? process.env.FIGMA_TOKEN as string | undefined;
-  if (!figmaToken) {
-    throw new Error("Missing Figma token in request header");
+
+class SessionState {
+  figmaToken?: string;
+  figmaCookies?: string;
+}
+
+class SessionStore {
+  constructor(private sessions: Map<string, SessionState> = new Map()) {};
+
+  getSessionState(sessionId: string): SessionState {
+    return this.sessions.get(sessionId) ?? new SessionState();
   }
-  return figmaToken;
+
+  setSessionState(sessionId: string, state: SessionState) {
+    this.sessions.set(sessionId, state);
+  }
 }
 
 export async function curryRegisterMongo(server: McpServer): Promise<(mongoClient: MongoClient | null) => Promise<void>> {
+  const sessionStore = new SessionStore();
+
+  const getFigmaToken = async (extra: RequestHandlerExtra<ServerRequest, ServerNotification>): Promise<string> => {
+    const figmaToken = extra.requestInfo?.headers["x-figma-token"] as string ?? process.env.FIGMA_TOKEN as string | undefined;
+    const sessionId = extra.sessionId!;
+    if (!figmaToken) {
+      if (sessionId && sessionStore.getSessionState(sessionId).figmaToken) {
+        return sessionStore.getSessionState(sessionId).figmaToken!;
+      }
+    }
+    if (!figmaToken) {
+      throw new Error("Missing Figma token in request header or environment variable");
+    } else {
+      sessionStore.setSessionState(sessionId, { figmaToken });
+      return figmaToken;
+    }
+  }
+
+  const getFigmaCookies = async (extra: RequestHandlerExtra<ServerRequest, ServerNotification>): Promise<string> => {
+    const sessionId = extra.sessionId!;
+    if (sessionId && sessionStore.getSessionState(sessionId).figmaCookies) {
+      return sessionStore.getSessionState(sessionId).figmaCookies!;
+    }
+    const envCookies = process.env.FIGMA_COOKIES as string | undefined;
+    if (envCookies) {
+      sessionStore.setSessionState(sessionId, { figmaCookies: envCookies });
+      return envCookies;
+    }
+    const figmaEmails = extra.requestInfo?.headers["x-figma-emails"] as string ?? process.env.FIGMA_EMAILS as string | undefined;
+    const figmaPasswords = extra.requestInfo?.headers["x-figma-passwords-b64"] as string ?? process.env.FIGMA_PASS_B64 as string | undefined;
+    const figmaCookies = await loginFigma(figmaEmails, figmaPasswords);
+    if (!figmaCookies) {
+      throw new Error("Missing Figma cookies in request header or environment variable");
+    }
+    sessionStore.setSessionState(sessionId, { figmaCookies });
+    return figmaCookies;
+  }
+
   server.registerTool(
     "get-figma-nodes",
     {
@@ -28,9 +77,10 @@ export async function curryRegisterMongo(server: McpServer): Promise<(mongoClien
         geometry: z.boolean().default(true).describe("Whether to include geometry (vector) data in the response."),
       }
     },
+
     async (args: { fileKey: string, nodeIds: string[], depth: number, geometry: boolean }, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
-      const figmaToken = getFigmaToken(extra);
-      const res = await getFigmaFileNode(args.fileKey, args.nodeIds, args.depth, args.geometry, figmaToken);
+      const figmaToken = await getFigmaToken(extra);
+      const res = await figmaTools.getFigmaFileNode(args.fileKey, args.nodeIds, args.depth, args.geometry, figmaToken);
       return {
         content: [{
           type: "text",
@@ -52,8 +102,8 @@ export async function curryRegisterMongo(server: McpServer): Promise<(mongoClien
       }
     },
     async (args: { fileKey: string, depth: number, geometry: boolean }, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
-      const figmaToken = getFigmaToken(extra);
-      const res = await getFigmaFileRoot(args.fileKey, args.depth, args.geometry, figmaToken);
+      const figmaToken = await getFigmaToken(extra);
+      const res = await figmaTools.getFigmaFileRoot(args.fileKey, args.depth, args.geometry, figmaToken);
       return {
         content: [{
           type: "text",
@@ -73,7 +123,7 @@ export async function curryRegisterMongo(server: McpServer): Promise<(mongoClien
       }
     },
     async (args: { url: string }, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
-      const res = parseFigmaUrl(args.url);
+      const res = figmaTools.parseFigmaUrl(args.url);
       return {
         content: [{
           type: "text",
@@ -96,8 +146,8 @@ export async function curryRegisterMongo(server: McpServer): Promise<(mongoClien
       }
     },
     async (args: { fileKey: string, ids: string[], scale: number, contents_only: boolean }, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
-      const figmaToken = getFigmaToken(extra);
-      const res = await getFigmaImages(args.fileKey, args.ids, args.scale, args.contents_only, figmaToken);
+      const figmaToken = await getFigmaToken(extra);
+      const res = await figmaTools.getFigmaImages(args.fileKey, args.ids, args.scale, args.contents_only, figmaToken);
       return {
         content: [
           {
@@ -109,10 +159,97 @@ export async function curryRegisterMongo(server: McpServer): Promise<(mongoClien
     }
   );
 
+  server.registerTool(
+    "get-figma-plans",
+    {
+      title: "get-figma-plans",
+      description: "Fetches Figma plans.",
+      inputSchema: {
+        compact: z.boolean().default(true).describe("Whether to return a compact response."),
+      }
+    },
+    async (args: { compact: boolean }, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
+      const figmaCookies = await getFigmaCookies(extra);
+      const res = await figmaTools.getFigmaPlans(figmaCookies, args.compact);
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify(res, null, 0)
+        }]
+      };
+    }
+  );
+
+  server.registerTool(
+    "get-figma-teams",
+    {
+      title: "get-figma-teams",
+      description: "Fetches Figma teams.",
+      inputSchema: {
+        planId: z.string().describe("The Figma plan ID from `get-figma-plans`."),
+        compact: z.boolean().default(true).describe("Whether to return a compact response."),
+      }
+    },
+    async (args: { planId: string, compact: boolean }, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
+      const figmaCookies = await getFigmaCookies(extra);
+      const res = await figmaTools.getFigmaTeams(args.planId, figmaCookies, args.compact);
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify(res, null, 0)
+        }]
+      };
+    }
+  );
+
+  server.registerTool(
+    "get-figma-folders",
+    {
+      title: "get-figma-folders",
+      description: "Fetches Figma folders.",
+      inputSchema: {
+        teamsId: z.string().describe("The Figma team ID from `get-figma-teams`."),
+        compact: z.boolean().default(true).describe("Whether to return a compact response."),
+      }
+    },
+    async (args: { teamsId: string, compact: boolean }, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
+      const figmaCookies = await getFigmaCookies(extra);
+      const res = await figmaTools.getFigmaFolders(args.teamsId, figmaCookies, args.compact);
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify(res, null, 0)
+        }]
+      };
+    }
+  );
+
+  server.registerTool(
+    "get-figma-files",
+    {
+      title: "get-figma-files",
+      description: "Fetches Figma files.",
+      inputSchema: {
+        folderId: z.string().describe("The Figma folder ID from `get-figma-folders`."),
+        compact: z.boolean().default(true).describe("Whether to return a compact response."),
+      }
+    },
+    async (args: { folderId: string, compact: boolean }, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
+      const figmaCookies = await getFigmaCookies(extra);
+      const res = await figmaTools.getFigmaFiles(args.folderId, figmaCookies, args.compact);
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify(res, null, 0)
+        }]
+      };
+    }
+  );
+
+  const azureEmbeddings = new AzureEmbeddings(1000);
   // register the tool that uses the mongo client.
   return async (mongoClient: MongoClient | null) => {
     const figmaFileCache: FigmaFileCache = mongoClient ? new FigmaFileMongoCache(mongoClient) : new FigmaFileMemoryCache();
-    const azureEmbeddings = new AzureEmbeddings(1000);
     const embeddings = mongoClient ? new MongoCacheableEmbeddings(
       azureEmbeddings,
       mongoClient,
@@ -132,9 +269,9 @@ export async function curryRegisterMongo(server: McpServer): Promise<(mongoClien
         }
       },
       async (args: { fileKey: string, query: string, topK: number }, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
-        const figmaToken = getFigmaToken(extra);
+        const figmaToken = await getFigmaToken(extra);
         // enable caching of embeddings.
-        const res = await queryFigmaFileNode(figmaFileCache, args.fileKey, args.query, args.topK, figmaToken, embeddings);
+        const res = await figmaTools.queryFigmaFileNode(figmaFileCache, args.fileKey, args.query, args.topK, figmaToken, embeddings);
         return {
           content: [{
             type: "text",

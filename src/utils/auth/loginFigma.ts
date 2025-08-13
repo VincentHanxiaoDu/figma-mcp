@@ -14,7 +14,6 @@ export async function checkAuthCookie(
       return cookieMap;
     }
   }
-
   return null;
 }
 
@@ -33,6 +32,7 @@ export async function waitForAuthCookie(
     console.debug("Auth cookie not found yet, waiting...");
     await new Promise(resolve => setTimeout(resolve, 500));
   }
+  console.info("Cookies: ", cookies);
 
   if (!cookies) {
     console.error(`Timeout: Authentication cookie not found within ${timeoutMs / 1000} seconds`);
@@ -43,12 +43,10 @@ export async function waitForAuthCookie(
   return cookies;
 }
 
-async function handleStaySignedIn(page: Page, timeoutMs = 10000): Promise<void> {
+async function handleStaySignedIn(page: Page, timeoutMs = 100000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
-    console.debug("Waiting for 'Stay signed in?' prompt");
-
     try {
       const locator = page.locator('div.row.text-title');
       const element = await locator.first();
@@ -57,24 +55,20 @@ async function handleStaySignedIn(page: Page, timeoutMs = 10000): Promise<void> 
       if (visible) {
         const text = await element.textContent();
         if (text?.includes("Stay signed in?")) {
-          console.debug("'Stay signed in?' prompt found");
-          await (await page.waitForSelector('input[type="submit"]', { state: "visible" })).click()
+          console.debug("'Stay signed in?' prompt found, clicking 'Stay signed in'");
+          await (await page.waitForSelector('input[type="submit"]', { state: "visible" })).click();
           break;
         }
       }
     } catch (e) {
       // Keep waiting.
+      console.debug("Waiting for 'Stay signed in?' prompt");
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
-
-    await new Promise(resolve => setTimeout(resolve, 500));
   }
-
-  console.debug("Clicking 'Stay signed in' confirmation button");
-  await page.locator('input[type="submit"]').first().click({ timeout: 3000 });
 }
 
-
-export async function loginFigmaMicrosoft(email: string, passwordB64: string) {
+export async function loginFigma(email: string, passwordB64: string) {
   const password = Buffer.from(passwordB64, "base64").toString("utf-8");
   const browser = await chromium.launch({ headless: false });
   try {
@@ -94,11 +88,14 @@ export async function loginFigmaMicrosoft(email: string, passwordB64: string) {
     const displaySignText = await (await page.waitForSelector('#idRichContext_DisplaySign', { state: "visible" })).textContent();
     console.log("HUMAN VERIFICATION REQUIRED, enter OTP code: ", displaySignText);
     await handleStaySignedIn(page);
+    console.info("Waiting for auth cookie...");
     const cookies = await waitForAuthCookie(context);
     if (!cookies) {
       throw new Error("Failed to login Figma, no auth cookie found");
     }
-    return cookies;
+    const cookieString = Object.entries(cookies).map(([k, v]) => `${k}=${v}`).join("; ");
+    console.log("cookies: \n", cookieString);
+    return cookieString;
   } catch (e) {
     throw e;
   } finally {
