@@ -8,6 +8,10 @@ exports.getFigmaFileNode = getFigmaFileNode;
 exports.getFigmaFileRoot = getFigmaFileRoot;
 exports.queryFigmaFileNode = queryFigmaFileNode;
 exports.getFigmaImages = getFigmaImages;
+exports.getFigmaPlans = getFigmaPlans;
+exports.getFigmaTeams = getFigmaTeams;
+exports.getFigmaFolders = getFigmaFolders;
+exports.getFigmaFiles = getFigmaFiles;
 const axios_1 = __importDefault(require("axios"));
 const document_1 = require("langchain/document");
 const hybridSearch_1 = require("../search/hybridSearch");
@@ -155,4 +159,119 @@ async function getFigmaImages(fileKey, ids, scale, contents_only, figmaToken) {
         }
     });
     return response.data.images;
+}
+async function getFigmaPlans(figmaCookies, compact = true) {
+    const response = await axios_1.default.get(`https://www.figma.com/api/user/plans`, {
+        headers: {
+            "Cookie": figmaCookies,
+        },
+    });
+    if (response.status !== 200 || response.data.error) {
+        throw new Error(`Failed to get Figma plans: <${response.status}> ${response.data.error}`);
+    }
+    if (compact) {
+        return response.data.meta.plans.map((plan) => ({
+            planId: plan.plan_id,
+            planName: plan.plan_name,
+        }));
+    }
+    else {
+        return response.data;
+    }
+}
+async function getFigmaTeams(planId, figmaCookies, compact = true) {
+    const response = await axios_1.default.get(`https://www.figma.com/api/orgs/${planId}/teams`, {
+        params: {
+            include_member_count: false,
+            include_project_count: false,
+            include_top_members: false,
+        },
+        headers: {
+            "Cookie": figmaCookies,
+        },
+    });
+    if (response.status !== 200 || response.data.error) {
+        throw new Error(`Failed to get Figma plans: <${response.status}> ${response.data.error}`);
+    }
+    if (compact) {
+        return response.data.meta.map((team) => ({
+            teamId: team.id,
+            teamName: team.name,
+        }));
+    }
+    else {
+        return response.data;
+    }
+}
+async function getFigmaFolders(teamsId, figmaCookies, compact = true) {
+    const response = await axios_1.default.get(`https://www.figma.com/api/teams/${teamsId}/folders`, {
+        headers: {
+            "Cookie": figmaCookies,
+        },
+    });
+    if (response.status !== 200 || response.data.error) {
+        throw new Error(`Failed to get Figma team folders: <${response.status}> ${response.data.error}`);
+    }
+    if (compact) {
+        return response.data.meta.folder_rows.map((folderRow) => ({
+            folderId: folderRow.id,
+            folderPath: folderRow.path,
+            folderDescription: folderRow.description
+        }));
+    }
+    else {
+        return response.data;
+    }
+}
+async function getFigmaFilesPaginated(subPath, figmaCookies, compact = true, acc = []) {
+    const response = await axios_1.default.get(`https://www.figma.com${subPath}`, {
+        headers: {
+            "Cookie": figmaCookies,
+        },
+    });
+    if (response.status !== 200 || response.data.error) {
+        throw new Error(`Failed to get Figma files: <${response.status}> ${response.data.error}`);
+    }
+    const nextPage = response.data.pagination.next_page;
+    const pagePayload = compact ? response.data.meta.files.map((file) => ({
+        fileKey: file.key,
+        fileName: file.name,
+        fileDescription: file.description
+    })) : response.data.meta.files;
+    if (nextPage) {
+        return getFigmaFilesPaginated(nextPage, figmaCookies, compact, [...acc, ...pagePayload]);
+    }
+    else {
+        return [...acc, ...pagePayload];
+    }
+}
+async function getFigmaFiles(folderId, figmaCookies, compact = true) {
+    const response = await axios_1.default.get(`https://www.figma.com/api/folders/${folderId}/paginated_files`, {
+        headers: {
+            "Cookie": figmaCookies,
+        },
+        params: {
+            sort_column: "touched_at",
+            sort_order: "desc",
+            fetch_only_trashed_with_folder_files: false,
+            page_size: 8,
+            skip_fetching_repo_branches: true,
+            file_type: "figma",
+        }
+    });
+    if (response.status !== 200 || response.data.error) {
+        throw new Error(`Failed to get Figma team files: <${response.status}> ${response.data.error}`);
+    }
+    const nextPage = response.data.pagination.next_page;
+    const pagePayload = compact ? response.data.meta.files.map((file) => ({
+        fileKey: file.key,
+        fileName: file.name,
+        fileDescription: file.description
+    })) : response.data.meta.files;
+    if (nextPage) {
+        return getFigmaFilesPaginated(nextPage, figmaCookies, compact, [...pagePayload]);
+    }
+    else {
+        return [...pagePayload];
+    }
 }

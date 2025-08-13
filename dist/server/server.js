@@ -13,6 +13,7 @@ const mcp_js_1 = require("@modelcontextprotocol/sdk/server/mcp.js");
 const node_crypto_1 = require("node:crypto");
 const types_js_1 = require("@modelcontextprotocol/sdk/types.js");
 const register_1 = require("./register");
+const loginFigma_1 = require("../utils/auth/loginFigma");
 async function parseArgs() {
     const argv = await (0, yargs_1.default)(process.argv.slice(2)).option("env", {
         type: "string",
@@ -20,6 +21,8 @@ async function parseArgs() {
     }).option("port", {
         type: "number",
         description: "Port to run the server on",
+    }).option("login-figma", {
+        description: "Login to Figma and get cookies",
     }).parse();
     return argv;
 }
@@ -124,6 +127,12 @@ async function startMcpServer(mongoClient, curryRegisterMongo) {
 }
 async function main() {
     const argv = await parseArgs();
+    if (argv["login-figma"]) {
+        const figmaEmails = process.env.FIGMA_EMAILS;
+        const figmaPasswords = process.env.FIGMA_PASS_B64;
+        await (0, loginFigma_1.loginFigma)(figmaEmails, figmaPasswords);
+        process.exit(0);
+    }
     await loadEnv(argv);
     const mongoClient = await getMongoClient();
     await startMcpServer(mongoClient, register_1.curryRegisterMongo);

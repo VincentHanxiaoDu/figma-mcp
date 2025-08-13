@@ -55,6 +55,11 @@ export async function curryRegisterMongo(server: McpServer): Promise<(mongoClien
       sessionStore.setSessionState(sessionId, { figmaCookies: envCookies });
       return envCookies;
     }
+    const headerCookies = extra.requestInfo?.headers["x-figma-cookies"] as string | undefined;
+    if (headerCookies) {
+      sessionStore.setSessionState(sessionId, { figmaCookies: headerCookies });
+      return headerCookies;
+    }
     const figmaEmails = extra.requestInfo?.headers["x-figma-emails"] as string ?? process.env.FIGMA_EMAILS as string | undefined;
     const figmaPasswords = extra.requestInfo?.headers["x-figma-passwords-b64"] as string ?? process.env.FIGMA_PASS_B64 as string | undefined;
     const figmaCookies = await loginFigma(figmaEmails, figmaPasswords);
