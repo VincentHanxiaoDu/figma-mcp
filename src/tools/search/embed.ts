@@ -7,7 +7,7 @@ export interface Embeddings {
   getEmbeddings(texts: string[]): AsyncGenerator<number[], void, unknown>;
 }
 
-export class AzureEmbeddings implements Embeddings {
+export class AzureEmbeddings implements Embeddings, EmbeddingsInterface {
   protected batchSize: number;
   protected client: AzureOpenAI;
 
@@ -20,6 +20,21 @@ export class AzureEmbeddings implements Embeddings {
       apiVersion: "2024-12-01-preview",
       deployment: "text-embedding-3-large",
     });
+  }
+
+  async embedDocuments(documents: string[]): Promise<number[][]> {
+    const embeddings: number[][] = [];
+    for await (const embedding of this.getEmbeddings(documents)) {
+      embeddings.push(embedding);
+    }
+    return embeddings;
+  }
+
+  async embedQuery(document: string): Promise<number[]> {
+    const embeddingsIterator = this.getEmbeddings([document]);
+    const next = await embeddingsIterator.next();
+    if (next.done) throw new Error(`No embedding found for query: "${document}"`);
+    return next.value;
   }
 
   async *getEmbeddings(texts: string[]): AsyncGenerator<number[], void, unknown> {

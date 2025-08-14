@@ -53,10 +53,10 @@ class SessionStore {
         this.sessions.set(sessionId, state);
     }
 }
-async function curryRegisterMongo(server) {
+async function curryRegisterMongo(server, serverEnv) {
     const sessionStore = new SessionStore();
     const getFigmaToken = async (extra) => {
-        const figmaToken = extra.requestInfo?.headers["x-figma-token"] ?? process.env.FIGMA_TOKEN;
+        const figmaToken = extra.requestInfo?.headers["x-figma-token"] ?? serverEnv.figmaToken;
         const sessionId = extra.sessionId;
         if (!figmaToken) {
             if (sessionId && sessionStore.getSessionState(sessionId).figmaToken) {
@@ -76,7 +76,7 @@ async function curryRegisterMongo(server) {
         if (sessionId && sessionStore.getSessionState(sessionId).figmaCookies) {
             return sessionStore.getSessionState(sessionId).figmaCookies;
         }
-        const envCookies = process.env.FIGMA_COOKIES;
+        const envCookies = serverEnv.figmaCookies;
         if (envCookies) {
             sessionStore.setSessionState(sessionId, { figmaCookies: envCookies });
             return envCookies;
@@ -86,8 +86,8 @@ async function curryRegisterMongo(server) {
             sessionStore.setSessionState(sessionId, { figmaCookies: headerCookies });
             return headerCookies;
         }
-        const figmaEmails = extra.requestInfo?.headers["x-figma-emails"] ?? process.env.FIGMA_EMAILS;
-        const figmaPasswords = extra.requestInfo?.headers["x-figma-passwords-b64"] ?? process.env.FIGMA_PASS_B64;
+        const figmaEmails = extra.requestInfo?.headers["x-figma-username"] ?? serverEnv.figmaUsername;
+        const figmaPasswords = extra.requestInfo?.headers["x-figma-passwords-b64"] ?? serverEnv.figmaPasswordB64;
         const figmaCookies = await (0, loginFigma_1.loginFigma)(figmaEmails, figmaPasswords);
         if (!figmaCookies) {
             throw new Error("Missing Figma cookies in request header or environment variable");
@@ -238,8 +238,8 @@ async function curryRegisterMongo(server) {
     const azureEmbeddings = new embed_1.AzureEmbeddings(1000);
     // register the tool that uses the mongo client.
     return async (mongoClient) => {
-        const figmaFileCache = mongoClient ? new cache_1.FigmaFileMongoCache(mongoClient) : new cache_1.FigmaFileMemoryCache();
-        const embeddings = mongoClient ? new embed_1.MongoCacheableEmbeddings(azureEmbeddings, mongoClient, "azure-embeddings-cache") : new embed_1.MemoryCacheableEmbeddings(azureEmbeddings);
+        const figmaFileCache = serverEnv.disableCache ? null : mongoClient ? new cache_1.FigmaFileMongoCache(mongoClient) : new cache_1.FigmaFileMemoryCache();
+        const embeddings = serverEnv.disableCache ? azureEmbeddings : mongoClient ? new embed_1.MongoCacheableEmbeddings(azureEmbeddings, mongoClient, "azure-embeddings-cache") : new embed_1.MemoryCacheableEmbeddings(azureEmbeddings);
         server.registerTool("query-figma-file-node", {
             title: "query-figma-file-node",
             description: "Query the figma file node by name similarity search.",

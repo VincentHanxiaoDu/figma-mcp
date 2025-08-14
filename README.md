@@ -30,13 +30,13 @@ Now you can use the MCP in Claude Code.
 Use your account info (for now, only Azure accounts are supported) to find files automatically in the workspaces.
 
 ### Option 1: Configure credentials with `.env`
-Set `FIGMA_EMAILS` and `FIGMA_PASS_B64` in the `.env` file.
+Set `FIGMA_USERNAME` and `FIGMA_PASSWORD_B64` in the `.env` file.
 
 ### Option 2: Configure credentials with headers
-Pass `x-figma-emails` and `x-figma-passwords-b64` headers for the mcp tool calls.
+Pass `x-figma-username` and `x-figma-passwords-b64` headers for the mcp tool calls.
 
 ### Option 3: Configure cookies with `.env`
-Set `FIGMA_COOKIES` in the `.env` file, you can either manually copy and paste the cookies after logging in to Figma or get the cookies using the tool `npx github:VincentHanxiaoDu/figma-mcp --login-figma`
+Set `FIGMA_COOKIES` in the `.env` file, you can either manually copy and paste the cookies after logging in to Figma or get the cookies using the tool `npx github:VincentHanxiaoDu/figma-mcp --tool `
 
 ### Option 4: Configure cookies with headers
 Pass `x-figma-cookies` headers for the mcp tool calls.

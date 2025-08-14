@@ -7,6 +7,7 @@ import { MongoCacheableEmbeddings, MemoryCacheableEmbeddings, AzureEmbeddings } 
 import { MongoClient } from "mongodb";
 import { FigmaFileCache, FigmaFileMemoryCache, FigmaFileMongoCache } from "../tools/figma/cache";
 import { loginFigma } from "../utils/auth/loginFigma";
+import { ServerEnv } from "../utils/envHandler";
 
 
 class SessionState {
@@ -26,11 +27,11 @@ class SessionStore {
   }
 }
 
-export async function curryRegisterMongo(server: McpServer): Promise<(mongoClient: MongoClient | null) => Promise<void>> {
+export async function curryRegisterMongo(server: McpServer, serverEnv: ServerEnv): Promise<(mongoClient: MongoClient | null) => Promise<void>> {
   const sessionStore = new SessionStore();
 
   const getFigmaToken = async (extra: RequestHandlerExtra<ServerRequest, ServerNotification>): Promise<string> => {
-    const figmaToken = extra.requestInfo?.headers["x-figma-token"] as string ?? process.env.FIGMA_TOKEN as string | undefined;
+    const figmaToken = extra.requestInfo?.headers["x-figma-token"] as string ?? serverEnv.figmaToken;
     const sessionId = extra.sessionId!;
     if (!figmaToken) {
       if (sessionId && sessionStore.getSessionState(sessionId).figmaToken) {
@@ -50,7 +51,7 @@ export async function curryRegisterMongo(server: McpServer): Promise<(mongoClien
     if (sessionId && sessionStore.getSessionState(sessionId).figmaCookies) {
       return sessionStore.getSessionState(sessionId).figmaCookies!;
     }
-    const envCookies = process.env.FIGMA_COOKIES as string | undefined;
+    const envCookies = serverEnv.figmaCookies;
     if (envCookies) {
       sessionStore.setSessionState(sessionId, { figmaCookies: envCookies });
       return envCookies;
@@ -60,8 +61,8 @@ export async function curryRegisterMongo(server: McpServer): Promise<(mongoClien
       sessionStore.setSessionState(sessionId, { figmaCookies: headerCookies });
       return headerCookies;
     }
-    const figmaEmails = extra.requestInfo?.headers["x-figma-emails"] as string ?? process.env.FIGMA_EMAILS as string | undefined;
-    const figmaPasswords = extra.requestInfo?.headers["x-figma-passwords-b64"] as string ?? process.env.FIGMA_PASS_B64 as string | undefined;
+    const figmaEmails = extra.requestInfo?.headers["x-figma-username"] as string ?? serverEnv.figmaUsername!;
+    const figmaPasswords = extra.requestInfo?.headers["x-figma-passwords-b64"] as string ?? serverEnv.figmaPasswordB64!;
     const figmaCookies = await loginFigma(figmaEmails, figmaPasswords);
     if (!figmaCookies) {
       throw new Error("Missing Figma cookies in request header or environment variable");
@@ -254,8 +255,8 @@ export async function curryRegisterMongo(server: McpServer): Promise<(mongoClien
   const azureEmbeddings = new AzureEmbeddings(1000);
   // register the tool that uses the mongo client.
   return async (mongoClient: MongoClient | null) => {
-    const figmaFileCache: FigmaFileCache = mongoClient ? new FigmaFileMongoCache(mongoClient) : new FigmaFileMemoryCache();
-    const embeddings = mongoClient ? new MongoCacheableEmbeddings(
+    const figmaFileCache: FigmaFileCache | null = serverEnv.disableCache ? null : mongoClient ? new FigmaFileMongoCache(mongoClient) : new FigmaFileMemoryCache();
+    const embeddings = serverEnv.disableCache ? azureEmbeddings : mongoClient ? new MongoCacheableEmbeddings(
       azureEmbeddings,
       mongoClient,
       "azure-embeddings-cache"

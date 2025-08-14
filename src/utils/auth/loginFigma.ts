@@ -1,4 +1,5 @@
 import { chromium, Page, BrowserContext, Cookie } from 'playwright';
+import prompts from "prompts";
 
 export async function checkAuthCookie(
   context: BrowserContext
@@ -97,8 +98,44 @@ export async function loginFigma(email: string, passwordB64: string) {
     console.log("cookies: \n", cookieString);
     return cookieString;
   } catch (e) {
+    console.warn("Failed to login Figma, error: ", e);
     throw e;
   } finally {
     await browser.close();
   }
+}
+
+export async function askFigmaCreds(
+  defaults?: { username?: string; passwordB64?: string }
+) {
+  const questions: prompts.PromptObject[] = [
+    {
+      type: defaults?.username ? null : "text",
+      name: "username",
+      message: "Enter Figma username:",
+      validate: (v) => v?.trim() ? true : "Username is required"
+    },
+    {
+      type: defaults?.passwordB64 ? null : "password",
+      name: "password",
+      message: "Enter Figma password:",
+      validate: (v) => v?.length ? true : "Password is required"
+    }
+  ];
+
+  const onCancel = () => {
+    throw new Error("User cancelled input.");
+  };
+
+  const ans = await prompts(questions, { onCancel });
+
+  const figmaUsername = defaults?.username ?? ans.username;
+  const passwordPlain =
+    defaults?.passwordB64
+      ? Buffer.from(defaults.passwordB64, "base64").toString("utf-8")
+      : ans.password;
+  const figmaPasswordB64 =
+    defaults?.passwordB64 ?? Buffer.from(passwordPlain, "utf-8").toString("base64");
+
+  return { figmaUsername, figmaPasswordB64 };
 }

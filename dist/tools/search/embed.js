@@ -14,6 +14,20 @@ class AzureEmbeddings {
             deployment: "text-embedding-3-large",
         });
     }
+    async embedDocuments(documents) {
+        const embeddings = [];
+        for await (const embedding of this.getEmbeddings(documents)) {
+            embeddings.push(embedding);
+        }
+        return embeddings;
+    }
+    async embedQuery(document) {
+        const embeddingsIterator = this.getEmbeddings([document]);
+        const next = await embeddingsIterator.next();
+        if (next.done)
+            throw new Error(`No embedding found for query: "${document}"`);
+        return next.value;
+    }
     async *getEmbeddings(texts) {
         for (let i = 0; i < texts.length; i += this.batchSize) {
             const batch = texts.slice(i, i + this.batchSize);

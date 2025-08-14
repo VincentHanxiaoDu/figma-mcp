@@ -1,5 +1,3 @@
-import yargs from "yargs";
-import dotenv from "dotenv";
 import { MongoClient } from "mongodb";
 import express from "express";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -7,38 +5,13 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { randomUUID } from "node:crypto";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { curryRegisterMongo } from "./register";
-import { loginFigma } from "../utils/auth/loginFigma";
+import http from "http";
+import { ServerEnv } from "../utils/envHandler";
 
-async function parseArgs() {
-  const argv = await yargs(process.argv.slice(2)).option("env", {
-    type: "string",
-    description: "Path to .env file",
-  }).option("port", {
-    type: "number",
-    description: "Port to run the server on",
-  }).option("login-figma", {
-    description: "Login to Figma and get cookies",
-  }).parse();
-
-  return argv;
-}
-
-async function loadEnv(argv: yargs.Arguments) {
-  if (argv.env) {
-    console.info(`Loading env from ${argv.env}`);
-    dotenv.config({ path: argv.env as string });
-  } else {
-    dotenv.config();
-  }
-  if (argv.port) {
-    process.env.PORT = argv.port.toString();
-  }
-}
-
-async function getMongoClient() {
+async function getMongoClient(env: ServerEnv) {
+  console.info(`Getting MongoDB client for ${env.mongoUri}`);
   try {
-    const mongoUri = process.env.MONGODB_URI!;
-
+    const mongoUri = env.mongoUri!;
     console.info(`Connecting to MongoDB at ${mongoUri}`);
     return await new MongoClient(mongoUri).connect();
   } catch (e: any) {
@@ -47,9 +20,8 @@ async function getMongoClient() {
   }
 }
 
-async function startMcpServer(
-  mongoClient: MongoClient | null,
-  curryRegisterMongo: (server: McpServer) => Promise<(mongoClient: MongoClient | null) => Promise<void>>
+export async function startMcpServer(
+  serverEnv: ServerEnv
 ): Promise<void> {
 
   const app = express();
@@ -57,6 +29,7 @@ async function startMcpServer(
 
   // Map to store transports by session ID
   const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
+  const mongoClient = serverEnv.disableCache ? null : await getMongoClient(serverEnv);
 
   // Handle POST requests for client-to-server communication
   app.post('/mcp', async (req, res) => {
@@ -88,11 +61,10 @@ async function startMcpServer(
         }
       };
       const server = new McpServer({
-        name: "example-server",
+        name: "figma-mcp-server",
         version: "1.0.0"
       });
-
-      const registerMongo = await curryRegisterMongo(server);
+      const registerMongo = await curryRegisterMongo(server, serverEnv);
       await registerMongo(mongoClient);
 
       // Connect to the MCP server
@@ -132,21 +104,10 @@ async function startMcpServer(
   // Handle DELETE requests for session termination
   app.delete('/mcp', handleSessionRequest);
 
-  const port = process.env.PORT || "3000";
-  app.listen(port, () => {
-    console.info(`Server is running on port ${port}`);
+  const port = serverEnv.port!;
+  const server = http.createServer(app);
+  const host = serverEnv.host!;
+  server.listen(port, host, () => {
+    console.info(`Server is running on http://${host}:${port}`);
   });
-}
-
-export async function main() {
-  const argv = await parseArgs();
-  if (argv["login-figma"]) {
-    const figmaEmails = process.env.FIGMA_EMAILS! as string;
-    const figmaPasswords = process.env.FIGMA_PASS_B64! as string;
-    await loginFigma(figmaEmails, figmaPasswords); 
-    process.exit(0);
-  }
-  await loadEnv(argv);
-  const mongoClient = await getMongoClient();
-  await startMcpServer(mongoClient, curryRegisterMongo);
 }

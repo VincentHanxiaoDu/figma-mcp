@@ -1,9 +1,14 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.checkAuthCookie = checkAuthCookie;
 exports.waitForAuthCookie = waitForAuthCookie;
 exports.loginFigma = loginFigma;
+exports.askFigmaCreds = askFigmaCreds;
 const playwright_1 = require("playwright");
+const prompts_1 = __importDefault(require("prompts"));
 async function checkAuthCookie(context) {
     const cookies = await context.cookies();
     for (const cookie of cookies) {
@@ -88,9 +93,36 @@ async function loginFigma(email, passwordB64) {
         return cookieString;
     }
     catch (e) {
+        console.warn("Failed to login Figma, error: ", e);
         throw e;
     }
     finally {
         await browser.close();
     }
+}
+async function askFigmaCreds(defaults) {
+    const questions = [
+        {
+            type: defaults?.username ? null : "text",
+            name: "username",
+            message: "Enter Figma username:",
+            validate: (v) => v?.trim() ? true : "Username is required"
+        },
+        {
+            type: defaults?.passwordB64 ? null : "password",
+            name: "password",
+            message: "Enter Figma password:",
+            validate: (v) => v?.length ? true : "Password is required"
+        }
+    ];
+    const onCancel = () => {
+        throw new Error("User cancelled input.");
+    };
+    const ans = await (0, prompts_1.default)(questions, { onCancel });
+    const figmaUsername = defaults?.username ?? ans.username;
+    const passwordPlain = defaults?.passwordB64
+        ? Buffer.from(defaults.passwordB64, "base64").toString("utf-8")
+        : ans.password;
+    const figmaPasswordB64 = defaults?.passwordB64 ?? Buffer.from(passwordPlain, "utf-8").toString("base64");
+    return { figmaUsername, figmaPasswordB64 };
 }
