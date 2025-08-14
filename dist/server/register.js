@@ -87,7 +87,7 @@ async function curryRegisterMongo(server, serverEnv) {
             return headerCookies;
         }
         const figmaEmails = (extra.requestInfo?.headers["x-figma-username"] ?? serverEnv.figmaUsername);
-        const figmaPasswords = (extra.requestInfo?.headers["x-figma-passwords-b64"] ?? serverEnv.figmaPasswordB64);
+        const figmaPasswords = (extra.requestInfo?.headers["x-figma-password-b64"] ?? serverEnv.figmaPasswordB64);
         const figmaCookies = await (0, loginFigma_1.loginFigma)(figmaEmails, figmaPasswords);
         if (!figmaCookies) {
             throw new Error("Missing Figma cookies in request header or environment variable");

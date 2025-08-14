@@ -40,3 +40,16 @@ Set `FIGMA_COOKIES` in the `.env` file, you can either manually copy and paste t
 
 ### Option 4: Configure cookies with headers
 Pass `x-figma-cookies` headers for the mcp tool calls.
+
+# ENV VAR Table
+| ENV VAR            | ARGS                    | HEADER                     |
+|--------------------|-------------------------|----------------------------|
+| HOST               | --host                  | <N/A>                      |
+| PORT               | --port                  | <N/A>                      |
+| FIGMA_TOKEN        | --figma-token           | x-figma-token              |
+| FIGMA_USERNAME     | --figma-username        | x-figma-username           |
+| FIGMA_PASSWORD_B64 | --figma-password-b64    | x-figma-password-b64       |
+| FIGMA_COOKIES      | --figma-cookies         | x-figma-cookies            |
+
+**Note:**  
+- You can set credentials via environment variables, command-line arguments, or HTTP headers.  
