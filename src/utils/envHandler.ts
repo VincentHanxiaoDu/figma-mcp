@@ -1,4 +1,5 @@
 import dotenv from "dotenv";
+import assert from "node:assert";
 import yargs from "yargs";
 
 export type ServerEnv = {
@@ -13,6 +14,13 @@ export type ServerEnv = {
 }
 
 export class EnvHandler {
+  private static parsePort(port: string | number): number | undefined {
+    const portNum = Number(port);
+    if (Number.isNaN(portNum)) {
+      return undefined;
+    }
+    return portNum;
+  }
 
   private constructor() {}
   protected static async loadEnvVars(confPath?: string): Promise<ServerEnv> {
@@ -20,16 +28,9 @@ export class EnvHandler {
     if (confPath && res.error) {
       throw new Error(`Failed to load env file ${confPath}: ${res.error.message}`);
     }
-
-    const portRaw = process.env.PORT;
-    const port = portRaw !== undefined ? Number(portRaw) : undefined;
-    if (portRaw !== undefined && Number.isNaN(port)) {
-      throw new Error(`Invalid PORT value: ${portRaw}`);
-    }
-
     return {
       host: process.env.HOST,
-      port: port,
+      port: EnvHandler.parsePort(process.env.PORT as string),
       figmaUsername: process.env.FIGMA_USERNAME,
       figmaPasswordB64: process.env.FIGMA_PASSWORD_B64,
       figmaToken: process.env.FIGMA_TOKEN,
@@ -48,7 +49,7 @@ export class EnvHandler {
   static async resolveServerEnvs(args: yargs.Arguments): Promise<ServerEnv> {
     const argEnv = EnvHandler.removeUndefined<ServerEnv>({
       host: args.host as string,
-      port: args.port as number,
+      port: EnvHandler.parsePort(args.port as string),
       figmaUsername: args.figmaUsername as string,
       figmaPasswordB64: args.figmaPasswordB64 as string,
       figmaToken: args.figmaToken as string,
@@ -64,6 +65,8 @@ export class EnvHandler {
       disableCache: false,
     }
     // prefer args over env vars.
-    return { ...defaultEnv, ...procEnv, ...argEnv };
+    assert(argEnv.figmaCookies || (argEnv.figmaUsername && argEnv.figmaPasswordB64), "Missing required Figma credentials");
+    const env = { ...defaultEnv, ...procEnv, ...argEnv };
+    return env;
   }
 }

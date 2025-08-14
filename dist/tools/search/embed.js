@@ -44,7 +44,7 @@ class AzureEmbeddings {
 exports.AzureEmbeddings = AzureEmbeddings;
 class MongoCacheableEmbeddings {
     constructor(embeddings, mongoClient, cacheCollectionName) {
-        this.embeddingsCacheDB = mongoClient.db(process.env.MONGODB_EMBEDDING_CACHE_DB || "embedding-cache");
+        this.embeddingsCacheDB = mongoClient.db("embedding-cache");
         this.cacheCollection = this.embeddingsCacheDB.collection(cacheCollectionName);
         this.cacheCollection.createIndex({ text: 1 });
         this.embeddings = embeddings;

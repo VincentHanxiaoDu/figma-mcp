@@ -5,21 +5,24 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EnvHandler = void 0;
 const dotenv_1 = __importDefault(require("dotenv"));
+const node_assert_1 = __importDefault(require("node:assert"));
 class EnvHandler {
+    static parsePort(port) {
+        const portNum = Number(port);
+        if (Number.isNaN(portNum)) {
+            return undefined;
+        }
+        return portNum;
+    }
     constructor() { }
     static async loadEnvVars(confPath) {
         const res = confPath ? dotenv_1.default.config({ path: confPath }) : dotenv_1.default.config();
         if (confPath && res.error) {
             throw new Error(`Failed to load env file ${confPath}: ${res.error.message}`);
         }
-        const portRaw = process.env.PORT;
-        const port = portRaw !== undefined ? Number(portRaw) : undefined;
-        if (portRaw !== undefined && Number.isNaN(port)) {
-            throw new Error(`Invalid PORT value: ${portRaw}`);
-        }
         return {
             host: process.env.HOST,
-            port: port,
+            port: EnvHandler.parsePort(process.env.PORT),
             figmaUsername: process.env.FIGMA_USERNAME,
             figmaPasswordB64: process.env.FIGMA_PASSWORD_B64,
             figmaToken: process.env.FIGMA_TOKEN,
@@ -34,7 +37,7 @@ class EnvHandler {
     static async resolveServerEnvs(args) {
         const argEnv = EnvHandler.removeUndefined({
             host: args.host,
-            port: args.port,
+            port: EnvHandler.parsePort(args.port),
             figmaUsername: args.figmaUsername,
             figmaPasswordB64: args.figmaPasswordB64,
             figmaToken: args.figmaToken,
@@ -50,7 +53,9 @@ class EnvHandler {
             disableCache: false,
         };
         // prefer args over env vars.
-        return { ...defaultEnv, ...procEnv, ...argEnv };
+        (0, node_assert_1.default)(argEnv.figmaCookies || (argEnv.figmaUsername && argEnv.figmaPasswordB64), "Missing required Figma credentials");
+        const env = { ...defaultEnv, ...procEnv, ...argEnv };
+        return env;
     }
 }
 exports.EnvHandler = EnvHandler;
