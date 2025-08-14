@@ -11,9 +11,9 @@ export class FigmaFileMongoCache implements FigmaFileCache {
   protected figmaFileCacheBucket: GridFSBucket;
 
   constructor(mongoClient: MongoClient) {
-    const dbName = process.env.MONGODB_FIGMA_FILE_CACHE_DB || "figma_file_cache";
-    const bucketName = process.env.MONGODB_FIGMA_FILE_CACHE_BUCKET || "figma_file_bucket";
-    const collectionName = process.env.MONGODB_FIGMA_FILE_CACHE_COLLECTION || "figma_file_bucket.files";
+    const dbName = "figma_file_cache";
+    const bucketName = "figma_file_bucket";
+    const collectionName = "figma_file_bucket.files";
     const db = mongoClient.db(dbName);
     this.figmaFileCacheCollection = db.collection(collectionName);
     this.figmaFileCacheBucket = new GridFSBucket(db, { bucketName: bucketName });

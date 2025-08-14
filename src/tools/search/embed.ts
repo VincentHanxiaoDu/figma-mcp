@@ -59,7 +59,7 @@ export class MongoCacheableEmbeddings implements EmbeddingsInterface {
   protected embeddings: Embeddings;
 
   public constructor(embeddings: Embeddings, mongoClient: MongoClient, cacheCollectionName: string) {
-    this.embeddingsCacheDB = mongoClient.db(process.env.MONGODB_EMBEDDING_CACHE_DB || "embedding-cache");
+    this.embeddingsCacheDB = mongoClient.db("embedding-cache");
     this.cacheCollection = this.embeddingsCacheDB.collection(cacheCollectionName);
     this.cacheCollection.createIndex({ text: 1 });
     this.embeddings = embeddings;
