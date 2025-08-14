@@ -17,7 +17,7 @@ services:
     environment:
       - MONGODB_URI=mongodb://mongodb:27017
     ports:
-      - "3000:3000"
+      - "${PORT}:${PORT}"
     depends_on:
       - mongodb
     env_file:
