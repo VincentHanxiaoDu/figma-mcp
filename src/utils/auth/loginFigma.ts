@@ -70,7 +70,7 @@ async function handleStaySignedIn(page: Page, timeoutMs = 100000): Promise<void>
 
 export async function loginFigma(email: string, passwordB64: string) {
   const password = Buffer.from(passwordB64, "base64").toString("utf-8");
-  const browser = await chromium.launch({ headless: false });
+  const browser = await chromium.launch({ headless: true });
   try {
     const context = await browser.newContext();
     const page = await context.newPage();

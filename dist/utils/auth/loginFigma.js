@@ -60,7 +60,7 @@ async function handleStaySignedIn(page, timeoutMs = 100000) {
 }
 async function loginFigma(email, passwordB64) {
     const password = Buffer.from(passwordB64, "base64").toString("utf-8");
-    const browser = await playwright_1.chromium.launch({ headless: false });
+    const browser = await playwright_1.chromium.launch({ headless: true });
     try {
         const context = await browser.newContext();
         const page = await context.newPage();
