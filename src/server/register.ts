@@ -286,5 +286,28 @@ export async function curryRegisterMongo(server: McpServer, serverEnv: ServerEnv
         };
       }
     );
+
+    server.registerTool(
+      "query-figma-file-list",
+      {
+        title: "query-figma-file-list",
+        description: "Query the figma file list by name similarity search.",
+        inputSchema: {
+          query: z.string().describe("The query to search for."),
+          topK: z.number().int().gte(1).lte(100).default(30).describe("The number of results to return."),
+        }
+      },
+      async (args: { query: string, topK: number }, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
+        const figmaCookies = await getFigmaCookies(extra);
+        // enable caching of embeddings.
+        const res = await figmaTools.queryFigmaFiles(figmaCookies, args.query, args.topK, embeddings);
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify(res, null, 0)
+          }]
+        };
+      }
+    );
   }
 }

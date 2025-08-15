@@ -1,6 +1,6 @@
-import axios from 'axios';
+import axios, { AxiosError, AxiosResponse } from 'axios';
 import { Document } from 'langchain/document';
-import { hybridSearch } from '../search/hybridSearch';
+import { fileContentHybridSearch, fileNameHybridSearch } from '../search/hybridSearch';
 import { EmbeddingsInterface } from "@langchain/core/embeddings";
 import { FigmaFileCache } from './cache';
 
@@ -185,7 +185,11 @@ export async function queryFigmaFileNode(
   });
 
   // Hybrid search.
-  return await hybridSearch(query, topK, documents, embeddings);
+  const hybridSearchResults = await fileContentHybridSearch(query, topK, documents, embeddings);
+  return hybridSearchResults.map((doc) => ({
+    name: doc.pageContent,
+    ids: doc.metadata?.ids || [],
+  }));
 }
 
 export async function getFigmaImages(
@@ -212,29 +216,56 @@ export async function getFigmaImages(
   return response.data.images;
 }
 
-export async function getFigmaPlans(figmaCookies: string, compact: boolean = true) {
+type FigmaPlan = {
+  planId: string;
+  planName: string;
+}
+
+type FigmaTeam = {
+  teamId: string;
+  teamName: string;
+}
+
+type FigmaFolder = {
+  folderId: string;
+  folderPath: string;
+  folderDescription: string;
+}
+
+type FigmaFile = {
+  fileKey: string;
+  fileName: string;
+  fileDescription: string;
+}
+
+type FigmaFileInfo = {
+  plan: FigmaPlan;
+  team: FigmaTeam;
+  folder: FigmaFolder;
+  file: FigmaFile;
+}
+
+export async function getFigmaPlans(figmaCookies: string, compact: boolean = true): Promise<FigmaPlan[]> {
   const response = await axios.get(
     `https://www.figma.com/api/user/plans`,
     {
       headers: {
         "Cookie": figmaCookies,
-      },
+      }
     }
   )
-  if (response.status !== 200 || response.data.error) {
-    throw new Error(`Failed to get Figma plans: <${response.status}> ${response.data.error}`);
-  }
+
   if (compact) {
-    return response.data.meta.plans.map((plan: any) => ({
+    return response.data.meta.plans.map((plan: Record<string, any>) => ({
       planId: plan.plan_id,
       planName: plan.plan_name,
     }));
   } else {
     return response.data;
-  } 
+  }
 }
 
-export async function getFigmaTeams(planId: string, figmaCookies: string, compact: boolean = true) {
+export async function getFigmaTeams(planId: string, figmaCookies: string, compact: boolean = true): Promise<FigmaTeam[]> {
   const response = await axios.get(
     `https://www.figma.com/api/orgs/${planId}/teams`,
     {
@@ -248,12 +279,8 @@ export async function getFigmaTeams(planId: string, figmaCookies: string, compac
       },
     }
   )
-  if (response.status !== 200 || response.data.error) {
-    throw new Error(`Failed to get Figma plans: <${response.status}> ${response.data.error}`);
-  }
-
   if (compact) {
-    return response.data.meta.map((team: any) => ({
+    return response.data.meta.map((team: Record<string, any>) => ({
       teamId: team.id,
       teamName: team.name,
     }));
@@ -263,7 +290,7 @@ export async function getFigmaTeams(planId: string, figmaCookies: string, compac
 }
 
 
-export async function getFigmaFolders(teamsId: string, figmaCookies: string, compact: boolean = true) {
+export async function getFigmaFolders(teamsId: string, figmaCookies: string, compact: boolean = true): Promise<FigmaFolder[]> {
   const response = await axios.get(
     `https://www.figma.com/api/teams/${teamsId}/folders`,
     {
@@ -271,13 +298,10 @@ export async function getFigmaFolders(teamsId: string, figmaCookies: string, com
         "Cookie": figmaCookies,
       },
     }
-  )
-  if (response.status !== 200 || response.data.error) {
-    throw new Error(`Failed to get Figma team folders: <${response.status}> ${response.data.error}`);
-  }
-  
+  );
+
   if (compact) {
-    return response.data.meta.folder_rows.map((folderRow: any) => ({
+    return response.data.meta.folder_rows.map((folderRow: Record<string, any>) => ({
       folderId: folderRow.id,
       folderPath: folderRow.path,
       folderDescription: folderRow.description
@@ -287,7 +311,7 @@ export async function getFigmaFolders(teamsId: string, figmaCookies: string, com
   }
 }
 
-async function getFigmaFilesPaginated(subPath: string, figmaCookies: string, compact: boolean = true, acc: any[] = []) {
+async function getFigmaFilesPaginated(subPath: string, figmaCookies: string, compact: boolean = true, acc: FigmaFile[] = []) {
   const response = await axios.get(
     `https://www.figma.com${subPath}`,
     {
@@ -296,9 +320,6 @@ async function getFigmaFilesPaginated(subPath: string, figmaCookies: string, com
       },
     }
   )
-  if (response.status !== 200 || response.data.error) {
-    throw new Error(`Failed to get Figma files: <${response.status}> ${response.data.error}`);
-  }
   const nextPage = response.data.pagination.next_page;
   const pagePayload = compact ? response.data.meta.files.map((file: any) => ({
     fileKey: file.key,
@@ -312,7 +333,7 @@ async function getFigmaFilesPaginated(subPath: string, figmaCookies: string, com
   }
 }
 
-export async function getFigmaFiles(folderId: string, figmaCookies: string, compact: boolean = true) {
+export async function getFigmaFiles(folderId: string, figmaCookies: string, compact: boolean = true): Promise<FigmaFile[]> {
   const response = await axios.get(
     `https://www.figma.com/api/folders/${folderId}/paginated_files`,
     {
@@ -329,11 +350,8 @@ export async function getFigmaFiles(folderId: string, figmaCookies: string, comp
       }
     }
   )
-  if (response.status !== 200 || response.data.error) {
-    throw new Error(`Failed to get Figma team files: <${response.status}> ${response.data.error}`);
-  }
   const nextPage = response.data.pagination.next_page;
-  const pagePayload = compact ? response.data.meta.files.map((file: any) => ({
+  const pagePayload = compact ? response.data.meta.files.map((file: Record<string, any>) => ({
     fileKey: file.key,
     fileName: file.name,
     fileDescription: file.description
@@ -343,4 +361,50 @@ export async function getFigmaFiles(folderId: string, figmaCookies: string, comp
   } else {
     return [...pagePayload];
   }
+}
+
+async function assembleFigmaFileInfo(figmaCookies: string): Promise<FigmaFileInfo[]> {
+  const plans = await getFigmaPlans(figmaCookies).catch(() => []);
+  const planResults = await Promise.all(
+    plans.map(async (plan) => {
+      const teams = await getFigmaTeams(plan.planId, figmaCookies).catch(() => []);
+      const teamResults = await Promise.all(
+        teams.map(async (team) => {
+          const folders = await getFigmaFolders(team.teamId, figmaCookies).catch(() => []);
+          const folderResults = await Promise.all(
+            folders.map(async (folder) => {
+              const files = await getFigmaFiles(folder.folderId, figmaCookies).catch(() => []);
+              return files.map((file) => ({ plan, team, folder, file }));
+            })
+          );
+          return folderResults.flat();
+        })
+      );
+      return teamResults.flat();
+    })
+  );
+  return planResults.flat();
+}
+
+export async function queryFigmaFiles(figmaCookies: string, query: string, topK: number, embeddings: EmbeddingsInterface) {
+  const fileInfo = await assembleFigmaFileInfo(figmaCookies);
+
+  const documents = fileInfo.map((file) => {
+    return new Document({
+      pageContent: (file.file.fileName ?? "") + (file.file.fileDescription ?? ""),
+      metadata: {
+        fileName: file.file.fileName,
+        fileDescription: file.file.fileDescription,
+        planName: file.plan.planName,
+        teamName: file.team.teamName,
+        folderPath: file.folder.folderPath,
+        planId: file.plan.planId,
+        teamId: file.team.teamId,
+        folderId: file.folder.folderId,
+        fileKey: file.file.fileKey
+      },
+    });
+  });
+  const fileNameSearchResults = await fileNameHybridSearch(query, topK, documents, embeddings);
+  return fileNameSearchResults.map((doc) => doc.metadata);
 }

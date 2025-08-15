@@ -65,8 +65,8 @@ export class EnvHandler {
       disableCache: false,
     }
     // prefer args over env vars.
-    assert(argEnv.figmaCookies || (argEnv.figmaUsername && argEnv.figmaPasswordB64), "Missing required Figma credentials");
     const env = { ...defaultEnv, ...procEnv, ...argEnv };
+    assert(env.figmaCookies || (env.figmaUsername && env.figmaPasswordB64), "Missing required Figma credentials");
     return env;
   }
 }

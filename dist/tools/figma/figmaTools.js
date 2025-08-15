@@ -12,6 +12,7 @@ exports.getFigmaPlans = getFigmaPlans;
 exports.getFigmaTeams = getFigmaTeams;
 exports.getFigmaFolders = getFigmaFolders;
 exports.getFigmaFiles = getFigmaFiles;
+exports.queryFigmaFiles = queryFigmaFiles;
 const axios_1 = __importDefault(require("axios"));
 const document_1 = require("langchain/document");
 const hybridSearch_1 = require("../search/hybridSearch");
@@ -144,7 +145,11 @@ async function queryFigmaFileNode(figmaFileCache, fileKey, query, topK, figmaTok
         });
     });
     // Hybrid search.
-    return await (0, hybridSearch_1.hybridSearch)(query, topK, documents, embeddings);
+    const hybridSearchResults = await (0, hybridSearch_1.fileContentHybridSearch)(query, topK, documents, embeddings);
+    return hybridSearchResults.map((doc) => ({
+        name: doc.pageContent,
+        ids: doc.metadata?.ids || [],
+    }));
 }
 async function getFigmaImages(fileKey, ids, scale, contents_only, figmaToken) {
     const response = await axios_1.default.get(`https://api.figma.com/v1/images/${fileKey}`, {
@@ -164,11 +169,8 @@ async function getFigmaPlans(figmaCookies, compact = true) {
     const response = await axios_1.default.get(`https://www.figma.com/api/user/plans`, {
         headers: {
             "Cookie": figmaCookies,
-        },
+        }
     });
-    if (response.status !== 200 || response.data.error) {
-        throw new Error(`Failed to get Figma plans: <${response.status}> ${response.data.error}`);
-    }
     if (compact) {
         return response.data.meta.plans.map((plan) => ({
             planId: plan.plan_id,
@@ -190,9 +192,6 @@ async function getFigmaTeams(planId, figmaCookies, compact = true) {
             "Cookie": figmaCookies,
         },
     });
-    if (response.status !== 200 || response.data.error) {
-        throw new Error(`Failed to get Figma plans: <${response.status}> ${response.data.error}`);
-    }
     if (compact) {
         return response.data.meta.map((team) => ({
             teamId: team.id,
@@ -209,9 +208,6 @@ async function getFigmaFolders(teamsId, figmaCookies, compact = true) {
             "Cookie": figmaCookies,
         },
     });
-    if (response.status !== 200 || response.data.error) {
-        throw new Error(`Failed to get Figma team folders: <${response.status}> ${response.data.error}`);
-    }
     if (compact) {
         return response.data.meta.folder_rows.map((folderRow) => ({
             folderId: folderRow.id,
@@ -229,9 +225,6 @@ async function getFigmaFilesPaginated(subPath, figmaCookies, compact = true, acc
             "Cookie": figmaCookies,
         },
     });
-    if (response.status !== 200 || response.data.error) {
-        throw new Error(`Failed to get Figma files: <${response.status}> ${response.data.error}`);
-    }
     const nextPage = response.data.pagination.next_page;
     const pagePayload = compact ? response.data.meta.files.map((file) => ({
         fileKey: file.key,
@@ -259,9 +252,6 @@ async function getFigmaFiles(folderId, figmaCookies, compact = true) {
             file_type: "figma",
         }
     });
-    if (response.status !== 200 || response.data.error) {
-        throw new Error(`Failed to get Figma team files: <${response.status}> ${response.data.error}`);
-    }
     const nextPage = response.data.pagination.next_page;
     const pagePayload = compact ? response.data.meta.files.map((file) => ({
         fileKey: file.key,
@@ -274,4 +264,41 @@ async function getFigmaFiles(folderId, figmaCookies, compact = true) {
     else {
         return [...pagePayload];
     }
+}
+async function assembleFigmaFileInfo(figmaCookies) {
+    const plans = await getFigmaPlans(figmaCookies).catch(() => []);
+    const planResults = await Promise.all(plans.map(async (plan) => {
+        const teams = await getFigmaTeams(plan.planId, figmaCookies).catch(() => []);
+        const teamResults = await Promise.all(teams.map(async (team) => {
+            const folders = await getFigmaFolders(team.teamId, figmaCookies).catch(() => []);
+            const folderResults = await Promise.all(folders.map(async (folder) => {
+                const files = await getFigmaFiles(folder.folderId, figmaCookies).catch(() => []);
+                return files.map((file) => ({ plan, team, folder, file }));
+            }));
+            return folderResults.flat();
+        }));
+        return teamResults.flat();
+    }));
+    return planResults.flat();
+}
+async function queryFigmaFiles(figmaCookies, query, topK, embeddings) {
+    const fileInfo = await assembleFigmaFileInfo(figmaCookies);
+    const documents = fileInfo.map((file) => {
+        return new document_1.Document({
+            pageContent: (file.file.fileName ?? "") + (file.file.fileDescription ?? ""),
+            metadata: {
+                fileName: file.file.fileName,
+                fileDescription: file.file.fileDescription,
+                planName: file.plan.planName,
+                teamName: file.team.teamName,
+                folderPath: file.folder.folderPath,
+                planId: file.plan.planId,
+                teamId: file.team.teamId,
+                folderId: file.folder.folderId,
+                fileKey: file.file.fileKey
+            },
+        });
+    });
+    const fileNameSearchResults = await (0, hybridSearch_1.fileNameHybridSearch)(query, topK, documents, embeddings);
+    return fileNameSearchResults.map((doc) => doc.metadata);
 }

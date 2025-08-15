@@ -8,6 +8,7 @@ async function main() {
     const entry = await commandHandler.getCommandCallback(args);
     await entry();
 }
-main().catch(() => {
+main().catch((error) => {
+    console.error("Error: ", error);
     process.exit(1);
 });
