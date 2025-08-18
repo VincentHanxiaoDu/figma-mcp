@@ -66,7 +66,6 @@ export class EnvHandler {
     }
     // prefer args over env vars.
     const env = { ...defaultEnv, ...procEnv, ...argEnv };
-    assert(env.figmaCookies || (env.figmaUsername && env.figmaPasswordB64), "Missing required Figma credentials");
     return env;
   }
 }
