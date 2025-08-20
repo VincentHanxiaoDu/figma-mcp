@@ -101,8 +101,8 @@ async function curryRegisterMongo(server, serverEnv) {
         inputSchema: {
             fileKey: zod_1.z.string().describe("The key of the Figma file"),
             nodeIds: zod_1.z.array(zod_1.z.string()).describe("A array of Figma node ID to retrieve and convert."),
-            depth: zod_1.z.number().int().gte(0).lte(3).describe("Integer representing how deep into the node tree to traverse. For example, setting this to 1 will return only the children directly underneath the desired nodes. Not setting this parameter returns all nodes."),
-            geometry: zod_1.z.boolean().default(true).describe("Whether to include geometry (vector) data in the response."),
+            depth: zod_1.z.number().int().gte(0).lte(5).default(2).describe("Integer representing how deep into the node tree to traverse. For example, setting this to 1 will return only the children directly underneath the desired nodes. Not setting this parameter returns all nodes."),
+            geometry: zod_1.z.boolean().default(false).describe("Whether to include geometry (vector) data in the response."),
         }
     }, async (args, extra) => {
         const figmaToken = await getFigmaToken(extra);
@@ -119,8 +119,8 @@ async function curryRegisterMongo(server, serverEnv) {
         description: "Get the root node of a Figma file",
         inputSchema: {
             fileKey: zod_1.z.string().describe("The key of the Figma file"),
-            depth: zod_1.z.number().int().gte(0).lte(3).describe("Integer representing how deep into the node tree to traverse. For example, setting this to 1 will return only the children directly underneath the desired nodes. Not setting this parameter returns all nodes."),
-            geometry: zod_1.z.boolean().default(true).describe("Whether to include geometry (vector) data in the response."),
+            depth: zod_1.z.number().int().gte(0).lte(1).default(1).describe("Integer representing how deep into the node tree to traverse. For example, setting this to 1 will return only the children directly underneath the desired nodes. Not setting this parameter returns all nodes."),
+            geometry: zod_1.z.boolean().default(false).describe("Whether to include geometry (vector) data in the response."),
         }
     }, async (args, extra) => {
         const figmaToken = await getFigmaToken(extra);
@@ -144,28 +144,40 @@ async function curryRegisterMongo(server, serverEnv) {
             content: [{
                     type: "text",
                     text: JSON.stringify(res, null, 0)
-                }]
+                }],
+            structuredContent: res
         };
     });
-    server.registerTool("get-figma-node-image-png-url", {
-        title: "get-figma-node-image-png-url",
-        description: "Fetches PNG images URLs of specified Figma file nodes.",
+    server.registerTool("get-figma-node-image-png", {
+        title: "get-figma-node-image-png",
+        description: "Gets PNG images URLs of specified Figma file nodes.",
         inputSchema: {
             fileKey: zod_1.z.string().describe("The Figma file key."),
             ids: zod_1.z.array(zod_1.z.string()).describe("A array of Figma node ID to retrieve and convert."),
+            saveDir: zod_1.z.string().optional().default("/tmp/figma-images").describe("The directory to save the images to, if not provided, only the image URLs will be returned in the response."),
             scale: zod_1.z.number().min(0.01).max(4).default(1).describe("Scale of the image."),
             contents_only: zod_1.z.boolean().default(false).describe("Exclude overlapping content when rendering."),
+        },
+        outputSchema: {
+            images: zod_1.z.array(zod_1.z.object({
+                id: zod_1.z.string().describe("The node ID of the image."),
+                url: zod_1.z.string().describe("The URL of the image, if the image is not saved to the directory."),
+                path: zod_1.z.string().optional().describe("The path to the saved image, if the image is saved to the directory."),
+            })),
         }
     }, async (args, extra) => {
         const figmaToken = await getFigmaToken(extra);
-        const res = await figmaTools.getFigmaImages(args.fileKey, args.ids, args.scale, args.contents_only, figmaToken);
+        const res = await figmaTools.getFigmaImages(args.fileKey, args.ids, args.saveDir, args.scale, args.contents_only, figmaToken);
         return {
             content: [
                 {
                     type: "text",
                     text: JSON.stringify(res, null, 0)
                 }
-            ]
+            ],
+            structuredContent: {
+                images: res,
+            }
         };
     });
     server.registerTool("get-figma-plans", {
@@ -246,7 +258,7 @@ async function curryRegisterMongo(server, serverEnv) {
             inputSchema: {
                 fileKey: zod_1.z.string().describe("The Figma file key."),
                 query: zod_1.z.string().describe("The query to search for."),
-                topK: zod_1.z.number().int().gte(1).lte(100).default(30).describe("The number of results to return."),
+                topK: zod_1.z.number().int().gte(1).lte(100).default(25).describe("The number of results to return."),
             }
         }, async (args, extra) => {
             const figmaToken = await getFigmaToken(extra);
@@ -264,7 +276,7 @@ async function curryRegisterMongo(server, serverEnv) {
             description: "Query the figma file list by name similarity search.",
             inputSchema: {
                 query: zod_1.z.string().describe("The query to search for."),
-                topK: zod_1.z.number().int().gte(1).lte(100).default(30).describe("The number of results to return."),
+                topK: zod_1.z.number().int().gte(1).lte(100).default(25).describe("The number of results to return."),
             }
         }, async (args, extra) => {
             const figmaCookies = await getFigmaCookies(extra);
@@ -275,6 +287,29 @@ async function curryRegisterMongo(server, serverEnv) {
                         type: "text",
                         text: JSON.stringify(res, null, 0)
                     }]
+            };
+        });
+        server.registerTool("get-figma-file-pages", {
+            title: "get-figma-file-pages",
+            description: "Get the pages of a Figma file.",
+            inputSchema: {
+                fileKey: zod_1.z.string().describe("The Figma file key."),
+            },
+            outputSchema: {
+                pages: zod_1.z.array(zod_1.z.object({
+                    name: zod_1.z.string().describe("The name of the page."),
+                    id: zod_1.z.string().describe("The ID of the page."),
+                })),
+            }
+        }, async (args, extra) => {
+            const figmaToken = await getFigmaToken(extra);
+            const res = await figmaTools.getFigmaFilePages(args.fileKey, figmaToken);
+            return {
+                content: [{
+                        type: "text",
+                        text: JSON.stringify(res, null, 0)
+                    }],
+                structuredContent: { pages: res }
             };
         });
     };

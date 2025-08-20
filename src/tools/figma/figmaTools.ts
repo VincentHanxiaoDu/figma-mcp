@@ -3,6 +3,8 @@ import { Document } from 'langchain/document';
 import { fileContentHybridSearch, fileNameHybridSearch } from '../search/hybridSearch';
 import { EmbeddingsInterface } from "@langchain/core/embeddings";
 import { FigmaFileCache } from './cache';
+import path from 'node:path';
+import fs from 'node:fs';
 
 export function parseFigmaUrl(url: string): {
   fileKey: string;
@@ -103,11 +105,11 @@ export async function getFigmaFileRoot(
 }
 
 
-function* traverse_node(node: Record<string, any>): Generator<[string, string]> {
-  yield [node.name, node.id];
+function* traverse_node<T>(node: Record<string, any>, process: ((node: Record<string, any>) => T)): Generator<T> {
+  yield process(node);
   if (Array.isArray(node.children)) {
     for (const child of node.children) {
-      yield* traverse_node(child);
+      yield* traverse_node(child, process);
     }
   }
 }
@@ -165,7 +167,7 @@ export async function queryFigmaFileNode(
   const fileMeta = await getFigmaFileMetaData(fileKey, figmaToken);
   const resJson = await getFigmaFile(figmaFileCache, fileKey, fileMeta.file.version, figmaToken);
   // Construct mapping of name to ids.
-  const groupedMap = Array.from(traverse_node(resJson.document)).reduce(
+  const groupedMap = Array.from(traverse_node(resJson.document, (node) => [node.name, node.id])).reduce(
     (acc: Map<string, string[]>, [name, id]) => {
       if (!acc.has(name)) {
         acc.set(name, []);
@@ -192,13 +194,63 @@ export async function queryFigmaFileNode(
   }));
 }
 
+export async function getFigmaFilePages(fileKey: string, figmaToken: string) {
+  const fileMeta = await getFigmaFileMetaData(fileKey, figmaToken);
+  const figmaFile = await getFigmaFile(null, fileKey, fileMeta.file.version, figmaToken);
+  return Array.from(traverse_node(figmaFile.document, (node) => {
+    if (node.type === "CANVAS") {
+      return {
+        name: node.name,
+        id: node.id,
+      };
+    }
+    return null;
+  })).filter((page) => page !== null);
+}
+
+const INVALID_CHARS = /[<>:"/\\|?*\x00-\x1F]/g;
+const TRAILING = /[ .]+$/;
+
+function toSafeFilename(name: string) {
+  return name.replace(INVALID_CHARS, "_").replace(TRAILING, "");
+}
+
+function safeJoin(dir: string, filename: string) {
+  const safe = toSafeFilename(filename);
+  const full = path.resolve(dir, safe);
+  const base = path.resolve(dir) + path.sep;
+  if (!full.startsWith(base)) throw new Error("Path traversal detected");
+  return full;
+}
+
+async function writePNGToFile(id: string, url: string, saveDir: string) {
+  await fs.mkdir(saveDir, { recursive: true }, (err) => {if (err) throw err});
+  const filename = `${id}.png`;
+  const imagePath = safeJoin(saveDir, filename);
+  try {
+    const resp = await axios.get<ArrayBuffer>(url, { responseType: "arraybuffer" });
+    const buf = Buffer.from(resp.data);
+    const PNG_SIG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    if (buf.length < 8 || !buf.subarray(0, 8).equals(PNG_SIG)) {
+      throw new Error("Downloaded file is not a valid PNG");
+    }
+
+    await fs.writeFile(imagePath, buf, (err) => {if (err) throw err});
+    return { id, url, path: imagePath };
+  } catch (error) {
+    console.error(`Failed to write image ${id} to ${imagePath}:`, error);
+    return { id, url };
+  }
+}
+
 export async function getFigmaImages(
   fileKey: string,
   ids: string[],
+  saveDir: string | undefined,
   scale: number,
   contents_only: boolean,
   figmaToken: string,
-): Promise<{ id: string; url: string; base64: string }[]> {
+): Promise<{ id: string, url: string, path?: string }[]> {
   const response = await axios.get(
     `https://api.figma.com/v1/images/${fileKey}`,
     {
@@ -213,7 +265,15 @@ export async function getFigmaImages(
       }
     }
   )
-  return response.data.images;
+  const images: Record<string, string> = response.data.images;
+  if (saveDir) {
+    const imageInfo = await Promise.all(Object.entries(images).map(async ([id, url]) => writePNGToFile(id, url, saveDir)));
+    return imageInfo;
+  }
+  return Object.entries(images).map(([id, url]) => ({
+    id: id,
+    url: url,
+  }));
 }
 
 type FigmaPlan = {

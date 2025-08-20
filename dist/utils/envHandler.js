@@ -5,7 +5,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EnvHandler = void 0;
 const dotenv_1 = __importDefault(require("dotenv"));
-const node_assert_1 = __importDefault(require("node:assert"));
 class EnvHandler {
     static parsePort(port) {
         const portNum = Number(port);
@@ -54,7 +53,6 @@ class EnvHandler {
         };
         // prefer args over env vars.
         const env = { ...defaultEnv, ...procEnv, ...argEnv };
-        (0, node_assert_1.default)(env.figmaCookies || (env.figmaUsername && env.figmaPasswordB64), "Missing required Figma credentials");
         return env;
     }
 }

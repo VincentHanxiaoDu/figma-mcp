@@ -7,6 +7,7 @@ exports.parseFigmaUrl = parseFigmaUrl;
 exports.getFigmaFileNode = getFigmaFileNode;
 exports.getFigmaFileRoot = getFigmaFileRoot;
 exports.queryFigmaFileNode = queryFigmaFileNode;
+exports.getFigmaFilePages = getFigmaFilePages;
 exports.getFigmaImages = getFigmaImages;
 exports.getFigmaPlans = getFigmaPlans;
 exports.getFigmaTeams = getFigmaTeams;
@@ -16,6 +17,8 @@ exports.queryFigmaFiles = queryFigmaFiles;
 const axios_1 = __importDefault(require("axios"));
 const document_1 = require("langchain/document");
 const hybridSearch_1 = require("../search/hybridSearch");
+const node_path_1 = __importDefault(require("node:path"));
+const node_fs_1 = __importDefault(require("node:fs"));
 function parseFigmaUrl(url) {
     const figmaUrl = new URL(url);
     if (!figmaUrl.hostname.includes("figma.com")) {
@@ -84,11 +87,11 @@ async function getFigmaFileRoot(fileKey, depth, geometry, figmaToken) {
     resJson.document = addOmitMessage(resJson.document, depth);
     return resJson;
 }
-function* traverse_node(node) {
-    yield [node.name, node.id];
+function* traverse_node(node, process) {
+    yield process(node);
     if (Array.isArray(node.children)) {
         for (const child of node.children) {
-            yield* traverse_node(child);
+            yield* traverse_node(child, process);
         }
     }
 }
@@ -129,7 +132,7 @@ async function queryFigmaFileNode(figmaFileCache, fileKey, query, topK, figmaTok
     const fileMeta = await getFigmaFileMetaData(fileKey, figmaToken);
     const resJson = await getFigmaFile(figmaFileCache, fileKey, fileMeta.file.version, figmaToken);
     // Construct mapping of name to ids.
-    const groupedMap = Array.from(traverse_node(resJson.document)).reduce((acc, [name, id]) => {
+    const groupedMap = Array.from(traverse_node(resJson.document, (node) => [node.name, node.id])).reduce((acc, [name, id]) => {
         if (!acc.has(name)) {
             acc.set(name, []);
         }
@@ -151,7 +154,54 @@ async function queryFigmaFileNode(figmaFileCache, fileKey, query, topK, figmaTok
         ids: doc.metadata?.ids || [],
     }));
 }
-async function getFigmaImages(fileKey, ids, scale, contents_only, figmaToken) {
+async function getFigmaFilePages(fileKey, figmaToken) {
+    const fileMeta = await getFigmaFileMetaData(fileKey, figmaToken);
+    const figmaFile = await getFigmaFile(null, fileKey, fileMeta.file.version, figmaToken);
+    return Array.from(traverse_node(figmaFile.document, (node) => {
+        if (node.type === "CANVAS") {
+            return {
+                name: node.name,
+                id: node.id,
+            };
+        }
+        return null;
+    })).filter((page) => page !== null);
+}
+const INVALID_CHARS = /[<>:"/\\|?*\x00-\x1F]/g;
+const TRAILING = /[ .]+$/;
+function toSafeFilename(name) {
+    return name.replace(INVALID_CHARS, "_").replace(TRAILING, "");
+}
+function safeJoin(dir, filename) {
+    const safe = toSafeFilename(filename);
+    const full = node_path_1.default.resolve(dir, safe);
+    const base = node_path_1.default.resolve(dir) + node_path_1.default.sep;
+    if (!full.startsWith(base))
+        throw new Error("Path traversal detected");
+    return full;
+}
+async function writePNGToFile(id, url, saveDir) {
+    await node_fs_1.default.mkdir(saveDir, { recursive: true }, (err) => { if (err)
+        throw err; });
+    const filename = `${id}.png`;
+    const imagePath = safeJoin(saveDir, filename);
+    try {
+        const resp = await axios_1.default.get(url, { responseType: "arraybuffer" });
+        const buf = Buffer.from(resp.data);
+        const PNG_SIG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+        if (buf.length < 8 || !buf.subarray(0, 8).equals(PNG_SIG)) {
+            throw new Error("Downloaded file is not a valid PNG");
+        }
+        await node_fs_1.default.writeFile(imagePath, buf, (err) => { if (err)
+            throw err; });
+        return { id, url, path: imagePath };
+    }
+    catch (error) {
+        console.error(`Failed to write image ${id} to ${imagePath}:`, error);
+        return { id, url };
+    }
+}
+async function getFigmaImages(fileKey, ids, saveDir, scale, contents_only, figmaToken) {
     const response = await axios_1.default.get(`https://api.figma.com/v1/images/${fileKey}`, {
         headers: {
             "X-Figma-Token": figmaToken,
@@ -163,7 +213,15 @@ async function getFigmaImages(fileKey, ids, scale, contents_only, figmaToken) {
             contents_only: contents_only ? "true" : "false",
         }
     });
-    return response.data.images;
+    const images = response.data.images;
+    if (saveDir) {
+        const imageInfo = await Promise.all(Object.entries(images).map(async ([id, url]) => writePNGToFile(id, url, saveDir)));
+        return imageInfo;
+    }
+    return Object.entries(images).map(([id, url]) => ({
+        id: id,
+        url: url,
+    }));
 }
 async function getFigmaPlans(figmaCookies, compact = true) {
     const response = await axios_1.default.get(`https://www.figma.com/api/user/plans`, {
