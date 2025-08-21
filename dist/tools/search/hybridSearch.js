@@ -61,7 +61,8 @@ async function performHybridSearch(query, documents, embeddings, config = DEFAUL
         return [];
     }
     try {
-        const vectorStore = await memory_1.MemoryVectorStore.fromDocuments(documents, embeddings);
+        const filteredDocuments = documents.filter(doc => doc.pageContent.trim().length > 0);
+        const vectorStore = await memory_1.MemoryVectorStore.fromDocuments(filteredDocuments, embeddings);
         const [similarityResults, lexicalResults] = await Promise.all([
             vectorStore.similaritySearch(query, config.topK),
             Promise.resolve(lexicalSearch(documents, query, config.topK))
