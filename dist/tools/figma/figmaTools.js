@@ -201,7 +201,8 @@ async function writePNGToFile(id, url, saveDir) {
         return { id, url };
     }
 }
-async function getFigmaImages(fileKey, ids, saveDir, scale, contents_only, figmaToken) {
+const saveDir = "/tmp/figma-images";
+async function getFigmaImages(fileKey, ids, saveFile, scale, contents_only, figmaToken) {
     const response = await axios_1.default.get(`https://api.figma.com/v1/images/${fileKey}`, {
         headers: {
             "X-Figma-Token": figmaToken,
@@ -214,7 +215,7 @@ async function getFigmaImages(fileKey, ids, saveDir, scale, contents_only, figma
         }
     });
     const images = response.data.images;
-    if (saveDir) {
+    if (saveFile) {
         const imageInfo = await Promise.all(Object.entries(images).map(async ([id, url]) => writePNGToFile(id, url, saveDir)));
         return imageInfo;
     }

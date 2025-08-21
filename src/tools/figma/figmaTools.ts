@@ -243,10 +243,12 @@ async function writePNGToFile(id: string, url: string, saveDir: string) {
   }
 }
 
+const saveDir = "/tmp/figma-images";
+
 export async function getFigmaImages(
   fileKey: string,
   ids: string[],
-  saveDir: string | undefined,
+  saveFile: boolean,
   scale: number,
   contents_only: boolean,
   figmaToken: string,
@@ -266,7 +268,7 @@ export async function getFigmaImages(
     }
   )
   const images: Record<string, string> = response.data.images;
-  if (saveDir) {
+  if (saveFile) {
     const imageInfo = await Promise.all(Object.entries(images).map(async ([id, url]) => writePNGToFile(id, url, saveDir)));
     return imageInfo;
   }

@@ -148,7 +148,7 @@ export async function curryRegisterMongo(server: McpServer, serverEnv: ServerEnv
       inputSchema: {
         fileKey: z.string().describe("The Figma file key."),
         ids: z.array(z.string()).describe("A array of Figma node ID to retrieve and convert."),
-        saveDir: z.string().optional().default("/tmp/figma-images").describe("The directory to save the images to, if not provided, only the image URLs will be returned in the response."),
+        saveFile: z.boolean().default(false).describe("Whether to save the images to the file system."),
         scale: z.number().min(0.01).max(4).default(1).describe("Scale of the image."),
         contents_only: z.boolean().default(false).describe("Exclude overlapping content when rendering."),
       },
@@ -160,9 +160,9 @@ export async function curryRegisterMongo(server: McpServer, serverEnv: ServerEnv
         })),
       }
     },
-    async (args: { fileKey: string, ids: string[], saveDir?: string, scale: number, contents_only: boolean }, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
+    async (args: { fileKey: string, ids: string[], saveFile: boolean, scale: number, contents_only: boolean }, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
       const figmaToken = await getFigmaToken(extra);
-      const res: { id: string, url: string, path?: string }[] = await figmaTools.getFigmaImages(args.fileKey, args.ids, args.saveDir, args.scale, args.contents_only, figmaToken);
+      const res: { id: string, url: string, path?: string }[] = await figmaTools.getFigmaImages(args.fileKey, args.ids, args.saveFile, args.scale, args.contents_only, figmaToken);
       return {
         content: [
           {

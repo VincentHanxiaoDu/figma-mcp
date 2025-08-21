@@ -154,7 +154,7 @@ async function curryRegisterMongo(server, serverEnv) {
         inputSchema: {
             fileKey: zod_1.z.string().describe("The Figma file key."),
             ids: zod_1.z.array(zod_1.z.string()).describe("A array of Figma node ID to retrieve and convert."),
-            saveDir: zod_1.z.string().optional().default("/tmp/figma-images").describe("The directory to save the images to, if not provided, only the image URLs will be returned in the response."),
+            saveFile: zod_1.z.boolean().default(false).describe("Whether to save the images to the file system."),
             scale: zod_1.z.number().min(0.01).max(4).default(1).describe("Scale of the image."),
             contents_only: zod_1.z.boolean().default(false).describe("Exclude overlapping content when rendering."),
         },
@@ -167,7 +167,7 @@ async function curryRegisterMongo(server, serverEnv) {
         }
     }, async (args, extra) => {
         const figmaToken = await getFigmaToken(extra);
-        const res = await figmaTools.getFigmaImages(args.fileKey, args.ids, args.saveDir, args.scale, args.contents_only, figmaToken);
+        const res = await figmaTools.getFigmaImages(args.fileKey, args.ids, args.saveFile, args.scale, args.contents_only, figmaToken);
         return {
             content: [
                 {
