@@ -4,11 +4,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.parseFigmaUrl = parseFigmaUrl;
-exports.getFigmaFileNode = getFigmaFileNode;
+exports.getFigmaFileNodes = getFigmaFileNodes;
 exports.getFigmaFileRoot = getFigmaFileRoot;
 exports.queryFigmaFileNode = queryFigmaFileNode;
 exports.getFigmaFilePages = getFigmaFilePages;
 exports.getFigmaImages = getFigmaImages;
+exports.fetchFigmaImages = fetchFigmaImages;
 exports.getFigmaPlans = getFigmaPlans;
 exports.getFigmaTeams = getFigmaTeams;
 exports.getFigmaFolders = getFigmaFolders;
@@ -19,6 +20,7 @@ const document_1 = require("langchain/document");
 const hybridSearch_1 = require("../search/hybridSearch");
 const node_path_1 = __importDefault(require("node:path"));
 const node_fs_1 = __importDefault(require("node:fs"));
+const extractors_1 = require("./context_mcp/extractors");
 function parseFigmaUrl(url) {
     const figmaUrl = new URL(url);
     if (!figmaUrl.hostname.includes("figma.com")) {
@@ -53,7 +55,7 @@ function addOmitMessage(figmaNode, maxDepth) {
     traverse(figmaNode);
     return figmaNode;
 }
-async function getFigmaFileNode(fileKey, ids, depth, geometry, figmaToken) {
+async function getFigmaFileNodes(fileKey, ids, depth, geometry, figmaToken, compact) {
     const response = await axios_1.default.get(`https://api.figma.com/v1/files/${fileKey}/nodes`, {
         headers: {
             'X-Figma-Token': figmaToken,
@@ -65,14 +67,19 @@ async function getFigmaFileNode(fileKey, ids, depth, geometry, figmaToken) {
         }
     });
     const resJson = response.data;
-    for (const [k, v] of Object.entries(resJson.nodes ?? {})) {
-        if (v && typeof v === "object" && "document" in v && v.document) {
-            v.document = addOmitMessage(v.document, depth);
-        }
+    if (compact) {
+        return (0, extractors_1.simplifyRawFigmaObject)(resJson, [], { maxDepth: depth });
     }
-    return resJson;
+    else {
+        for (const [k, v] of Object.entries(resJson.nodes ?? {})) {
+            if (v && typeof v === "object" && "document" in v && v.document) {
+                v.document = addOmitMessage(v.document, depth);
+            }
+        }
+        return resJson;
+    }
 }
-async function getFigmaFileRoot(fileKey, depth, geometry, figmaToken) {
+async function getFigmaFileRoot(fileKey, depth, geometry, figmaToken, compact) {
     const response = await axios_1.default.get(`https://api.figma.com/v1/files/${fileKey}`, {
         headers: {
             'X-Figma-Token': figmaToken,
@@ -84,8 +91,13 @@ async function getFigmaFileRoot(fileKey, depth, geometry, figmaToken) {
         }
     });
     const resJson = response.data;
-    resJson.document = addOmitMessage(resJson.document, depth);
-    return resJson;
+    if (compact) {
+        return (0, extractors_1.simplifyRawFigmaObject)(resJson, [], { maxDepth: depth });
+    }
+    else {
+        resJson.document = addOmitMessage(resJson.document, depth);
+        return resJson;
+    }
 }
 function* traverse_node(node, process) {
     yield process(node);
@@ -202,7 +214,7 @@ async function writePNGToFile(id, url, saveDir) {
     }
 }
 const saveDir = "/tmp/figma-images";
-async function getFigmaImages(fileKey, ids, saveFile, scale, contents_only, figmaToken) {
+async function getFigmaImages(fileKey, ids, scale, contents_only, figmaToken) {
     const response = await axios_1.default.get(`https://api.figma.com/v1/images/${fileKey}`, {
         headers: {
             "X-Figma-Token": figmaToken,
@@ -215,14 +227,15 @@ async function getFigmaImages(fileKey, ids, saveFile, scale, contents_only, figm
         }
     });
     const images = response.data.images;
-    if (saveFile) {
-        const imageInfo = await Promise.all(Object.entries(images).map(async ([id, url]) => writePNGToFile(id, url, saveDir)));
-        return imageInfo;
-    }
     return Object.entries(images).map(([id, url]) => ({
         id: id,
         url: url,
     }));
+}
+async function fetchFigmaImages(fileKey, ids, scale, contents_only, figmaToken) {
+    const images = await getFigmaImages(fileKey, ids, scale, contents_only, figmaToken);
+    const imageInfo = await Promise.all(Object.values(images).map(async ({ id, url }) => writePNGToFile(id, url, saveDir)));
+    return imageInfo;
 }
 async function getFigmaPlans(figmaCookies, compact = true) {
     const response = await axios_1.default.get(`https://www.figma.com/api/user/plans`, {

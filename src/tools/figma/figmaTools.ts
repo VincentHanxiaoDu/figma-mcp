@@ -1,10 +1,13 @@
-import axios, { AxiosError, AxiosResponse } from 'axios';
+import axios from 'axios';
 import { Document } from 'langchain/document';
 import { fileContentHybridSearch, fileNameHybridSearch } from '../search/hybridSearch';
 import { EmbeddingsInterface } from "@langchain/core/embeddings";
 import { FigmaFileCache } from './cache';
 import path from 'node:path';
 import fs from 'node:fs';
+import type { GetFileResponse, GetFileNodesResponse } from "@figma/rest-api-spec"
+import { simplifyRawFigmaObject } from './context_mcp/extractors';
+import { SimplifiedDesign } from './context_mcp/extractors/types';
 
 export function parseFigmaUrl(url: string): {
   fileKey: string;
@@ -51,13 +54,14 @@ function addOmitMessage(figmaNode: Record<string, any>, maxDepth: number): Recor
   return figmaNode;
 }
 
-export async function getFigmaFileNode(
+export async function getFigmaFileNodes(
   fileKey: string,
   ids: string[],
   depth: number,
   geometry: boolean,
   figmaToken: string,
-): Promise<Record<string, any>> {
+  compact: boolean,
+): Promise<GetFileNodesResponse | SimplifiedDesign> {
   const response = await axios.get(
     `https://api.figma.com/v1/files/${fileKey}/nodes`,
     {
@@ -72,12 +76,16 @@ export async function getFigmaFileNode(
     }
   );
   const resJson = response.data;
-  for (const [k, v] of Object.entries(resJson.nodes ?? {})) {
-    if (v && typeof v === "object" && "document" in v && v.document) {
-      v.document = addOmitMessage(v.document, depth);
+  if (compact) {
+    return simplifyRawFigmaObject(resJson as GetFileNodesResponse, [], { maxDepth: depth });
+  } else {
+    for (const [k, v] of Object.entries(resJson.nodes ?? {})) {
+      if (v && typeof v === "object" && "document" in v && v.document) {
+        v.document = addOmitMessage(v.document, depth);
+      }
     }
+    return resJson as GetFileNodesResponse;
   }
-  return resJson;
 }
 
 export async function getFigmaFileRoot(
@@ -85,7 +93,8 @@ export async function getFigmaFileRoot(
   depth: number,
   geometry: boolean,
   figmaToken: string,
-): Promise<Record<string, any>> {
+  compact: boolean,
+): Promise<GetFileResponse | SimplifiedDesign> {
   const response = await axios.get(
     `https://api.figma.com/v1/files/${fileKey}`,
     {
@@ -100,8 +109,12 @@ export async function getFigmaFileRoot(
     }
   );
   const resJson = response.data;
-  resJson.document = addOmitMessage(resJson.document, depth);
-  return resJson;
+  if (compact) {
+    return simplifyRawFigmaObject(resJson as GetFileResponse, [], { maxDepth: depth });
+  } else {
+    resJson.document = addOmitMessage(resJson.document, depth);
+    return resJson;
+  }
 }
 
 
@@ -224,7 +237,7 @@ function safeJoin(dir: string, filename: string) {
 }
 
 async function writePNGToFile(id: string, url: string, saveDir: string) {
-  await fs.mkdir(saveDir, { recursive: true }, (err) => {if (err) throw err});
+  await fs.mkdir(saveDir, { recursive: true }, (err) => { if (err) throw err });
   const filename = `${id}.png`;
   const imagePath = safeJoin(saveDir, filename);
   try {
@@ -235,7 +248,7 @@ async function writePNGToFile(id: string, url: string, saveDir: string) {
       throw new Error("Downloaded file is not a valid PNG");
     }
 
-    await fs.writeFile(imagePath, buf, (err) => {if (err) throw err});
+    await fs.writeFile(imagePath, buf, (err) => { if (err) throw err });
     return { id, url, path: imagePath };
   } catch (error) {
     console.error(`Failed to write image ${id} to ${imagePath}:`, error);
@@ -248,11 +261,10 @@ const saveDir = "/tmp/figma-images";
 export async function getFigmaImages(
   fileKey: string,
   ids: string[],
-  saveFile: boolean,
   scale: number,
   contents_only: boolean,
   figmaToken: string,
-): Promise<{ id: string, url: string, path?: string }[]> {
+): Promise<{ id: string, url: string }[]> {
   const response = await axios.get(
     `https://api.figma.com/v1/images/${fileKey}`,
     {
@@ -268,14 +280,16 @@ export async function getFigmaImages(
     }
   )
   const images: Record<string, string> = response.data.images;
-  if (saveFile) {
-    const imageInfo = await Promise.all(Object.entries(images).map(async ([id, url]) => writePNGToFile(id, url, saveDir)));
-    return imageInfo;
-  }
   return Object.entries(images).map(([id, url]) => ({
     id: id,
     url: url,
   }));
+}
+
+export async function fetchFigmaImages(fileKey: string, ids: string[], scale: number, contents_only: boolean, figmaToken: string) {
+  const images = await getFigmaImages(fileKey, ids, scale, contents_only, figmaToken);
+  const imageInfo = await Promise.all(Object.values(images).map(async ({ id, url }) => writePNGToFile(id, url, saveDir)));
+  return imageInfo;
 }
 
 type FigmaPlan = {

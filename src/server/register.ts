@@ -81,12 +81,13 @@ export async function curryRegisterMongo(server: McpServer, serverEnv: ServerEnv
         nodeIds: z.array(z.string()).describe("A array of Figma node ID to retrieve and convert."),
         depth: z.number().int().gte(0).lte(5).default(2).describe("Integer representing how deep into the node tree to traverse. For example, setting this to 1 will return only the children directly underneath the desired nodes. Not setting this parameter returns all nodes."),
         geometry: z.boolean().default(false).describe("Whether to include geometry (vector) data in the response."),
+        compact: z.boolean().default(true).describe("Whether to return a compact response."),
       }
     },
 
-    async (args: { fileKey: string, nodeIds: string[], depth: number, geometry: boolean }, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
+    async (args: { fileKey: string, nodeIds: string[], depth: number, geometry: boolean, compact: boolean }, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
       const figmaToken = await getFigmaToken(extra);
-      const res = await figmaTools.getFigmaFileNode(args.fileKey, args.nodeIds, args.depth, args.geometry, figmaToken);
+      const res = await figmaTools.getFigmaFileNodes(args.fileKey, args.nodeIds, args.depth, args.geometry, figmaToken, args.compact);
       return {
         content: [{
           type: "text",
@@ -105,11 +106,12 @@ export async function curryRegisterMongo(server: McpServer, serverEnv: ServerEnv
         fileKey: z.string().describe("The key of the Figma file"),
         depth: z.number().int().gte(0).lte(1).default(1).describe("Integer representing how deep into the node tree to traverse. For example, setting this to 1 will return only the children directly underneath the desired nodes. Not setting this parameter returns all nodes."),
         geometry: z.boolean().default(false).describe("Whether to include geometry (vector) data in the response."),
+        compact: z.boolean().default(true).describe("Whether to return a compact response."),
       }
     },
-    async (args: { fileKey: string, depth: number, geometry: boolean }, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
+    async (args: { fileKey: string, depth: number, geometry: boolean, compact: boolean }, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
       const figmaToken = await getFigmaToken(extra);
-      const res = await figmaTools.getFigmaFileRoot(args.fileKey, args.depth, args.geometry, figmaToken);
+      const res = await figmaTools.getFigmaFileRoot(args.fileKey, args.depth, args.geometry, figmaToken, args.compact);
       return {
         content: [{
           type: "text",
@@ -141,28 +143,26 @@ export async function curryRegisterMongo(server: McpServer, serverEnv: ServerEnv
   );
 
   server.registerTool(
-    "get-figma-node-image-png",
+    "get-figma-node-image-png-urls",
     {
-      title: "get-figma-node-image-png",
+      title: "get-figma-node-image-png-urls",
       description: "Gets PNG images URLs of specified Figma file nodes.",
       inputSchema: {
         fileKey: z.string().describe("The Figma file key."),
         ids: z.array(z.string()).describe("A array of Figma node ID to retrieve and convert."),
-        saveFile: z.boolean().default(false).describe("Whether to save the images to the file system."),
         scale: z.number().min(0.01).max(4).default(1).describe("Scale of the image."),
-        contents_only: z.boolean().default(false).describe("Exclude overlapping content when rendering."),
+        contentsOnly: z.boolean().default(false).describe("Exclude overlapping content when rendering."),
       },
       outputSchema: {
         images: z.array(z.object({
           id: z.string().describe("The node ID of the image."),
-          url: z.string().describe("The URL of the image, if the image is not saved to the directory."),
-          path: z.string().optional().describe("The path to the saved image, if the image is saved to the directory."),
+          url: z.string().describe("The URL of the image, if the image is not saved to the directory.")
         })),
       }
     },
-    async (args: { fileKey: string, ids: string[], saveFile: boolean, scale: number, contents_only: boolean }, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
+    async (args: { fileKey: string, ids: string[], scale: number, contentsOnly: boolean }, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
       const figmaToken = await getFigmaToken(extra);
-      const res: { id: string, url: string, path?: string }[] = await figmaTools.getFigmaImages(args.fileKey, args.ids, args.saveFile, args.scale, args.contents_only, figmaToken);
+      const res: { id: string, url: string, path?: string }[] = await figmaTools.getFigmaImages(args.fileKey, args.ids, args.scale, args.contentsOnly, figmaToken);
       return {
         content: [
           {
@@ -176,6 +176,30 @@ export async function curryRegisterMongo(server: McpServer, serverEnv: ServerEnv
       }
     }
   );
+
+  server.registerTool(
+    "fetch-figma-images",
+    {
+      title: "fetch-figma-images",
+      description: "Fetch Figma images.",
+      inputSchema: {
+        fileKey: z.string().describe("The Figma file key."),
+        nodeIds: z.array(z.string()).describe("The Figma node IDs."),
+        scale: z.number().min(0.01).max(4).default(1).describe("Scale of the image."),
+        contentsOnly: z.boolean().default(false).describe("Exclude overlapping content when rendering."),
+      }
+    },
+    async (args: { fileKey: string, nodeIds: string[], scale: number, contentsOnly: boolean }, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
+      const figmaToken = await getFigmaToken(extra);
+      const res = await figmaTools.getFigmaImages(args.fileKey, args.nodeIds, args.scale, false, figmaToken);
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify(res, null, 0)
+        }]
+      };
+    }
+  )
 
   server.registerTool(
     "get-figma-plans",
