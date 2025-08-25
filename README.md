@@ -52,4 +52,11 @@ Pass `x-figma-cookies` headers for the mcp tool calls.
 | FIGMA_COOKIES      | --figma-cookies         | x-figma-cookies            |
 
 **Note:**  
-- You can set credentials via environment variables, command-line arguments, or HTTP headers.  
+- You can set credentials via environment variables, command-line arguments, or HTTP headers.
+
+
+This project includes portions of code from:
+
+- Figma-Context-MCP (https://github.com/GLips/Figma-Context-MCP)
+  Copyright (c) 2025 Graham Lipsman
+  Licensed under the MIT License
