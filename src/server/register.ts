@@ -79,9 +79,9 @@ export async function curryRegisterMongo(server: McpServer, serverEnv: ServerEnv
       inputSchema: {
         fileKey: z.string().describe("The key of the Figma file"),
         nodeIds: z.array(z.string()).describe("A array of Figma node ID to retrieve and convert."),
-        depth: z.number().int().gte(0).lte(5).default(2).describe("Integer representing how deep into the node tree to traverse."),
+        depth: z.number().int().gte(0).lte(10).default(2).describe("Integer representing how deep into the node tree to traverse."),
         geometry: z.boolean().default(false).describe("Whether to include geometry (vector) data in the response."),
-        compact: z.boolean().default(true).describe("Whether to return a compact response. Use compact mode to reduce the size of the response."),
+        compact: z.boolean().default(true).describe("Whether to return a compact response. Use compact mode to reduce the size of the response, always use compact mode when depth is large."),
       }
     },
 
@@ -106,7 +106,7 @@ export async function curryRegisterMongo(server: McpServer, serverEnv: ServerEnv
         fileKey: z.string().describe("The key of the Figma file"),
         depth: z.number().int().gte(0).lte(1).default(1).describe("Integer representing how deep into the node tree to traverse."),
         geometry: z.boolean().default(false).describe("Whether to include geometry (vector) data in the response."),
-        compact: z.boolean().default(true).describe("Whether to return a compact response. Use compact mode to reduce the size of the response."),
+        compact: z.boolean().default(true).describe("Whether to return a compact response. Use compact mode to reduce the size of the response, always use compact mode when depth is large."),
       }
     },
     async (args: { fileKey: string, depth: number, geometry: boolean, compact: boolean }, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {

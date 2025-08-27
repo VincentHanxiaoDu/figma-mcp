@@ -101,9 +101,9 @@ async function curryRegisterMongo(server, serverEnv) {
         inputSchema: {
             fileKey: zod_1.z.string().describe("The key of the Figma file"),
             nodeIds: zod_1.z.array(zod_1.z.string()).describe("A array of Figma node ID to retrieve and convert."),
-            depth: zod_1.z.number().int().gte(0).lte(5).default(2).describe("Integer representing how deep into the node tree to traverse."),
+            depth: zod_1.z.number().int().gte(0).lte(10).default(2).describe("Integer representing how deep into the node tree to traverse."),
             geometry: zod_1.z.boolean().default(false).describe("Whether to include geometry (vector) data in the response."),
-            compact: zod_1.z.boolean().default(true).describe("Whether to return a compact response. Use compact mode to reduce the size of the response."),
+            compact: zod_1.z.boolean().default(true).describe("Whether to return a compact response. Use compact mode to reduce the size of the response, always use compact mode when depth is large."),
         }
     }, async (args, extra) => {
         const figmaToken = await getFigmaToken(extra);
@@ -122,7 +122,7 @@ async function curryRegisterMongo(server, serverEnv) {
             fileKey: zod_1.z.string().describe("The key of the Figma file"),
             depth: zod_1.z.number().int().gte(0).lte(1).default(1).describe("Integer representing how deep into the node tree to traverse."),
             geometry: zod_1.z.boolean().default(false).describe("Whether to include geometry (vector) data in the response."),
-            compact: zod_1.z.boolean().default(true).describe("Whether to return a compact response. Use compact mode to reduce the size of the response."),
+            compact: zod_1.z.boolean().default(true).describe("Whether to return a compact response. Use compact mode to reduce the size of the response, always use compact mode when depth is large."),
         }
     }, async (args, extra) => {
         const figmaToken = await getFigmaToken(extra);
