@@ -261,6 +261,7 @@ const saveDir = "/tmp/figma-images";
 export async function getFigmaImages(
   fileKey: string,
   ids: string[],
+  fetch: boolean,
   scale: number,
   contents_only: boolean,
   figmaToken: string,
@@ -280,17 +281,13 @@ export async function getFigmaImages(
     }
   )
   const images: Record<string, string> = response.data.images;
-  return Object.entries(images).map(([id, url]) => ({
+  const imageInfo = Object.entries(images).map(([id, url]) => ({
     id: id,
     url: url,
   }));
+  return fetch ? await Promise.all(imageInfo.map(async ({ id, url }) => writePNGToFile(id, url, saveDir))) : imageInfo;
 }
 
-export async function fetchFigmaImages(fileKey: string, ids: string[], scale: number, contents_only: boolean, figmaToken: string) {
-  const images = await getFigmaImages(fileKey, ids, scale, contents_only, figmaToken);
-  const imageInfo = await Promise.all(Object.values(images).map(async ({ id, url }) => writePNGToFile(id, url, saveDir)));
-  return imageInfo;
-}
 
 type FigmaPlan = {
   planId: string;
